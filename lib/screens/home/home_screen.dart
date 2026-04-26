@@ -102,7 +102,7 @@ class HomeDashboard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Hi, ${user?.displayName ?? 'Student'} 👋',
+                      'Hi, ${user?.displayName ?? 'Student'}!',
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
