@@ -20,8 +20,15 @@ class MyApp extends StatelessWidget {
       title: 'FocusNFlow',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0F1117),
+        colorScheme: ColorScheme.dark(
+          primary: const Color(0xFF4F8EF7),
+          secondary: const Color(0xFF4F8EF7),
+          surface: const Color(0xFF1A1D2E),
+        ),
         useMaterial3: true,
+        fontFamily: 'Roboto',
       ),
       home: const LoginScreen(),
     );
