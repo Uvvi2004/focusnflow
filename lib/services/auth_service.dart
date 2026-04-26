@@ -5,13 +5,10 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // Get current user
   User? get currentUser => _auth.currentUser;
 
-  // Stream of auth state changes
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  // Sign up
   Future<String?> signUp(String email, String password, String name) async {
     try {
       if (!email.endsWith('@student.gsu.edu')) {
@@ -21,7 +18,9 @@ class AuthService {
         email: email,
         password: password,
       );
-      // Create user profile in Firestore
+      // Save display name to Firebase Auth profile
+      await result.user!.updateDisplayName(name);
+      // Save user profile to Firestore
       await _db.collection('users').doc(result.user!.uid).set({
         'uid': result.user!.uid,
         'displayName': name,
@@ -37,7 +36,6 @@ class AuthService {
     }
   }
 
-  // Sign in
   Future<String?> signIn(String email, String password) async {
     try {
       await _auth.signInWithEmailAndPassword(
@@ -50,7 +48,6 @@ class AuthService {
     }
   }
 
-  // Sign out
   Future<void> signOut() async {
     await _auth.signOut();
   }
