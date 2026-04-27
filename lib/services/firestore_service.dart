@@ -59,6 +59,14 @@ class FirestoreService {
             .toList());
   }
 
+  Future<void> addRoom(RoomModel room) async {
+    final ref = _db.collection('rooms').doc();
+    await ref.set({
+      ...room.toMap(),
+      'roomId': ref.id,
+    });
+  }
+
   Future<void> updateRoomStatus(String roomId, String status) async {
     await _db.collection('rooms').doc(roomId).update({
       'status': status,

@@ -53,6 +53,110 @@ class _RoomsScreenState extends State<RoomsScreen> {
     }
   }
 
+  void _showAddRoomSheet() {
+    final nameController = TextEditingController();
+    final buildingController = TextEditingController();
+    final floorController = TextEditingController();
+    final capacityController = TextEditingController();
+    final amenitiesController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Add Study Room',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: _textColor,
+              ),
+            ),
+            const SizedBox(height: 20),
+            _SheetTextField(
+                controller: nameController,
+                label: 'Room Name (e.g. Room 201)'),
+            const SizedBox(height: 12),
+            _SheetTextField(
+                controller: buildingController,
+                label: 'Building (e.g. Science Bldg)'),
+            const SizedBox(height: 12),
+            _SheetTextField(
+                controller: floorController,
+                label: 'Floor (e.g. 2nd Floor)'),
+            const SizedBox(height: 12),
+            _SheetTextField(
+              controller: capacityController,
+              label: 'Capacity (e.g. 20)',
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            _SheetTextField(
+              controller: amenitiesController,
+              label: 'Amenities (e.g. WiFi, Whiteboard)',
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.isEmpty ||
+                    buildingController.text.isEmpty) return;
+
+                final amenities = amenitiesController.text
+                    .split(',')
+                    .map((e) => e.trim())
+                    .where((e) => e.isNotEmpty)
+                    .toList();
+
+                final room = RoomModel(
+                  roomId: '',
+                  name: nameController.text.trim(),
+                  building: buildingController.text.trim(),
+                  floor: floorController.text.trim(),
+                  capacity: int.tryParse(capacityController.text) ?? 10,
+                  status: 'open',
+                  amenities: amenities,
+                  updatedAt: DateTime.now(),
+                );
+
+                await _firestoreService.addRoom(room);
+                if (mounted) Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _accentColor,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Add Room',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showRoomDetail(RoomModel room) {
     final statusColor = _statusColor(room.status);
     showModalBottomSheet(
@@ -107,7 +211,9 @@ class _RoomsScreenState extends State<RoomsScreen> {
             const SizedBox(height: 8),
             _DetailRow(
                 icon: Icons.devices_rounded,
-                text: room.amenities.join(', ')),
+                text: room.amenities.isEmpty
+                    ? 'No amenities listed'
+                    : room.amenities.join(', ')),
             const SizedBox(height: 24),
             const Text(
               'Update Status',
@@ -184,7 +290,6 @@ class _RoomsScreenState extends State<RoomsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            // Filter chips
             SizedBox(
               height: 40,
               child: ListView.separated(
@@ -201,14 +306,10 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: selected
-                            ? _accentColor
-                            : _cardColor,
+                        color: selected ? _accentColor : _cardColor,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: selected
-                              ? _accentColor
-                              : Colors.white10,
+                          color: selected ? _accentColor : Colors.white10,
                         ),
                       ),
                       child: Text(
@@ -236,7 +337,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return const Center(
-                      child: Text('No rooms found',
+                      child: Text('No rooms yet — tap + to add one',
                           style: TextStyle(color: _subtextColor)),
                     );
                   }
@@ -279,8 +380,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       room.name,
@@ -330,6 +430,11 @@ class _RoomsScreenState extends State<RoomsScreen> {
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddRoomSheet,
+        backgroundColor: _accentColor,
+        child: const Icon(Icons.add_rounded, color: Colors.white),
+      ),
     );
   }
 }
@@ -353,6 +458,41 @@ class _DetailRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SheetTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final TextInputType keyboardType;
+
+  const _SheetTextField({
+    required this.controller,
+    required this.label,
+    this.keyboardType = TextInputType.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F1117),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Color(0xFFE8EAED)),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Color(0xFF9AA0A6)),
+          border: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+      ),
     );
   }
 }
