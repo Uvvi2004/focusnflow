@@ -1,20 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'services/fcm_service.dart';
+
+// Handle background messages
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Set background message handler
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final FCMService _fcmService = FCMService();
+
+  @override
+  void initState() {
+    super.initState();
+    _fcmService.initialize();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,10 +49,10 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0F1117),
-        colorScheme: ColorScheme.dark(
-          primary: const Color(0xFF4F8EF7),
-          secondary: const Color(0xFF4F8EF7),
-          surface: const Color(0xFF1A1D2E),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF4F8EF7),
+          secondary: Color(0xFF4F8EF7),
+          surface: Color(0xFF1A1D2E),
         ),
         useMaterial3: true,
       ),
