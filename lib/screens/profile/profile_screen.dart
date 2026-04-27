@@ -35,14 +35,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             builder: (context, snapshot) {
               final data =
                   snapshot.data?.data() as Map<String, dynamic>? ?? {};
-              final name = data['displayName'] ?? _user.displayName ?? 'Student';
+              final name =
+                  data['displayName'] ?? _user.displayName ?? 'Student';
               final email = data['email'] ?? _user.email ?? '';
               final courses = List<String>.from(data['courses'] ?? []);
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header
                   const Text(
                     'Profile',
                     style: TextStyle(
@@ -69,9 +69,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           child: Center(
                             child: Text(
-                              name.isNotEmpty
-                                  ? name[0].toUpperCase()
-                                  : 'S',
+                              name.isNotEmpty ? name[0].toUpperCase() : 'S',
                               style: const TextStyle(
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
@@ -148,21 +146,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: courses
-                          .map((course) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: _accentColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color: _accentColor.withOpacity(0.3)),
-                                ),
-                                child: Text(
-                                  course,
-                                  style: const TextStyle(
-                                    color: _accentColor,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
+                          .map((course) => GestureDetector(
+                                onLongPress: () async {
+                                  final updated = [...courses]..remove(course);
+                                  await FirebaseFirestore.instance
+                                      .collection('users')
+                                      .doc(_user!.uid)
+                                      .set({'courses': updated},
+                                          SetOptions(merge: true));
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: _accentColor.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                        color: _accentColor.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        course,
+                                        style: const TextStyle(
+                                          color: _accentColor,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Icon(Icons.close,
+                                          size: 14, color: _accentColor),
+                                    ],
                                   ),
                                 ),
                               ))
@@ -276,8 +292,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   labelText: 'Course Code (e.g. CS450)',
                   labelStyle: TextStyle(color: _subtextColor),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 14),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
               ),
             ),
@@ -290,9 +306,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   courseController.text.trim()
                 ];
                 await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(_user!.uid)
-                  .set({'courses': updated}, SetOptions(merge: true));
+                    .collection('users')
+                    .doc(_user!.uid)
+                    .set({'courses': updated}, SetOptions(merge: true));
                 if (mounted) Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
