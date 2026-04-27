@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/task_model.dart';
 import '../models/room_model.dart';
+import '../models/group_model.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -141,5 +142,51 @@ class FirestoreService {
       batch.set(ref, {...room, 'roomId': ref.id});
     }
     await batch.commit();
+  }
+
+  // ── GROUPS ──
+
+  Stream<List<GroupModel>> getGroups() {
+    return _db
+        .collection('groups')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => GroupModel.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
+  Future<void> createGroup(GroupModel group) async {
+    final ref = _db.collection('groups').doc();
+    final groupWithId = GroupModel(
+      groupId: ref.id,
+      name: group.name,
+      courseTag: group.courseTag,
+      description: group.description,
+      members: group.members,
+      coverImageUrl: group.coverImageUrl,
+      createdBy: group.createdBy,
+      createdAt: group.createdAt,
+      nextSession: group.nextSession,
+    );
+    await ref.set(groupWithId.toMap());
+  }
+
+  Future<void> joinGroup(String groupId, String userId) async {
+    await _db.collection('groups').doc(groupId).update({
+      'members': FieldValue.arrayUnion([userId]),
+    });
+  }
+
+  Future<void> leaveGroup(String groupId, String userId) async {
+    await _db.collection('groups').doc(groupId).update({
+      'members': FieldValue.arrayRemove([userId]),
+    });
+  }
+
+  Future<void> updateNextSession(String groupId, DateTime session) async {
+    await _db.collection('groups').doc(groupId).update({
+      'nextSession': Timestamp.fromDate(session),
+    });
   }
 }
