@@ -1,12 +1,9 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class FCMService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications =
-      FlutterLocalNotificationsPlugin();
 
   Future<void> initialize() async {
     // Request permission
@@ -16,24 +13,6 @@ class FCMService {
       sound: true,
     );
 
-    // Initialize local notifications
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidSettings);
-    await _localNotifications.initialize(initSettings);
-
-    // Create notification channel for Android
-    const channel = AndroidNotificationChannel(
-      'focusnflow_channel',
-      'FocusNFlow Notifications',
-      description: 'Notifications for study reminders and group updates',
-      importance: Importance.high,
-    );
-    await _localNotifications
-        .resolvePlatformSpecificImplementation
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-
     // Save FCM token to Firestore
     await _saveToken();
 
@@ -42,7 +21,7 @@ class FCMService {
 
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen((message) {
-      _showLocalNotification(message);
+      print('Foreground message: ${message.notification?.title}');
     });
   }
 
@@ -67,29 +46,6 @@ class FCMService {
     }
   }
 
-  void _showLocalNotification(RemoteMessage message) {
-    final notification = message.notification;
-    if (notification == null) return;
-
-    _localNotifications.show(
-      notification.hashCode,
-      notification.title,
-      notification.body,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'focusnflow_channel',
-          'FocusNFlow Notifications',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-    );
-  }
-
-  // Send notification via Firestore trigger
-  // In production this would use Cloud Functions
-  // For demo we store notification requests in Firestore
   Future<void> sendGroupNotification({
     required String groupName,
     required String message,
