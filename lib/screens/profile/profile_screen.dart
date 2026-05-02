@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
+import '../../services/storage_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -12,13 +13,23 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
+  final _storageService = StorageService();
   final _user = FirebaseAuth.instance.currentUser;
+  bool _uploadingAvatar = false;
 
   static const _bgColor = Color(0xFF0F1117);
   static const _cardColor = Color(0xFF1A1D2E);
   static const _accentColor = Color(0xFF4F8EF7);
   static const _textColor = Color(0xFFE8EAED);
   static const _subtextColor = Color(0xFF9AA0A6);
+
+  Future<void> _pickAndUploadAvatar() async {
+    final file = await _storageService.pickImage();
+    if (file == null) return;
+    setState(() => _uploadingAvatar = true);
+    await _storageService.uploadAvatar(file, _user!.uid);
+    setState(() => _uploadingAvatar = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   data['displayName'] ?? _user.displayName ?? 'Student';
               final email = data['email'] ?? _user.email ?? '';
               final courses = List<String>.from(data['courses'] ?? []);
+              final photoURL = data['photoURL'] ?? '';
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,29 +65,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 28),
 
-                  // Avatar and name
+                  // Avatar
                   Center(
                     child: Column(
                       children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: _accentColor.withOpacity(0.15),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                                color: _accentColor.withOpacity(0.3),
-                                width: 2),
-                          ),
-                          child: Center(
-                            child: Text(
-                              name.isNotEmpty ? name[0].toUpperCase() : 'S',
-                              style: const TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: _accentColor,
+                        GestureDetector(
+                          onTap: _pickAndUploadAvatar,
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: _accentColor.withOpacity(0.15),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: _accentColor.withOpacity(0.3),
+                                      width: 2),
+                                ),
+                                child: _uploadingAvatar
+                                    ? const Center(
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2))
+                                    : photoURL.isNotEmpty
+                                        ? ClipOval(
+                                            child: Image.network(
+                                              photoURL,
+                                              width: 80,
+                                              height: 80,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          )
+                                        : Center(
+                                            child: Text(
+                                              name.isNotEmpty
+                                                  ? name[0].toUpperCase()
+                                                  : 'S',
+                                              style: const TextStyle(
+                                                fontSize: 32,
+                                                fontWeight: FontWeight.bold,
+                                                color: _accentColor,
+                                              ),
+                                            ),
+                                          ),
                               ),
-                            ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: _accentColor,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                        color: _bgColor, width: 2),
+                                  ),
+                                  child: const Icon(Icons.camera_alt_rounded,
+                                      size: 12, color: Colors.white),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -94,6 +144,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: _subtextColor,
                             fontSize: 14,
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Tap avatar to change photo',
+                          style: TextStyle(
+                              color: _subtextColor, fontSize: 12),
                         ),
                       ],
                     ),
@@ -148,7 +204,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: courses
                           .map((course) => GestureDetector(
                                 onLongPress: () async {
-                                  final updated = [...courses]..remove(course);
+                                  final updated = [...courses]
+                                    ..remove(course);
                                   await FirebaseFirestore.instance
                                       .collection('users')
                                       .doc(_user!.uid)
@@ -162,7 +219,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     color: _accentColor.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                        color: _accentColor.withOpacity(0.3)),
+                                        color:
+                                            _accentColor.withOpacity(0.3)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -186,7 +244,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   const SizedBox(height: 32),
 
-                  // Settings section
+                  // Settings
                   const Text(
                     'Settings',
                     style: TextStyle(
@@ -292,8 +350,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   labelText: 'Course Code (e.g. CS450)',
                   labelStyle: TextStyle(color: _subtextColor),
                   border: InputBorder.none,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
                 ),
               ),
             ),
