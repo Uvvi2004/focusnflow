@@ -6,7 +6,6 @@ class GroupModel {
   final String courseTag;
   final String description;
   final List<String> members;
-  final String coverImageUrl;
   final String createdBy;
   final DateTime createdAt;
   final DateTime? nextSession;
@@ -17,7 +16,6 @@ class GroupModel {
     required this.courseTag,
     required this.description,
     required this.members,
-    required this.coverImageUrl,
     required this.createdBy,
     required this.createdAt,
     this.nextSession,
@@ -30,7 +28,6 @@ class GroupModel {
       'courseTag': courseTag,
       'description': description,
       'members': members,
-      'coverImageUrl': coverImageUrl,
       'createdBy': createdBy,
       'createdAt': Timestamp.fromDate(createdAt),
       'nextSession':
@@ -45,7 +42,6 @@ class GroupModel {
       courseTag: map['courseTag'] ?? '',
       description: map['description'] ?? '',
       members: List<String>.from(map['members'] ?? []),
-      coverImageUrl: map['coverImageUrl'] ?? '',
       createdBy: map['createdBy'] ?? '',
       createdAt: (map['createdAt'] as Timestamp).toDate(),
       nextSession: map['nextSession'] != null

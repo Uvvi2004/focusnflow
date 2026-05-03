@@ -133,7 +133,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 );
 
                 await _firestoreService.addRoom(room);
-                if (mounted) Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accentColor,
@@ -233,7 +233,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                       onPressed: () async {
                         await _firestoreService.updateRoomStatus(
                             room.roomId, status);
-                        if (mounted) Navigator.pop(context);
+                        if (context.mounted) Navigator.pop(context);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: color.withValues(alpha: 0.15),
@@ -296,7 +296,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 scrollDirection: Axis.horizontal,
                 itemCount: _filters.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                separatorBuilder: (_, i) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
                   final f = _filters[index];
                   final selected = _filter == f;
@@ -350,7 +350,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   return ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     itemCount: rooms.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, i) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final room = rooms[index];
                       final statusColor = _statusColor(room.status);

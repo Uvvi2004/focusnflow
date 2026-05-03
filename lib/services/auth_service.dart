@@ -32,7 +32,6 @@ class AuthService {
         'fcmToken': '',
         'notificationsEnabled': true,
         'groupAlertsEnabled': true,
-        'pomodoroDuration': 25,
         'createdAt': Timestamp.now(),
       });
       return null;

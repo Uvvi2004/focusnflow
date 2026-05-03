@@ -79,20 +79,6 @@ class FCMService {
     });
   }
 
-  Future<void> sendGroupNotification({
-    required String groupName,
-    required String message,
-    required List<String> memberUids,
-  }) async {
-    await FirebaseFirestore.instance.collection('notifications').add({
-      'title': 'FocusNFlow — $groupName',
-      'body': message,
-      'recipients': memberUids,
-      'createdAt': Timestamp.now(),
-      'type': 'group',
-    });
-  }
-
   // Sent immediately when a creator sets a next session date.
   Future<void> sendGroupSessionScheduled({
     required String groupName,

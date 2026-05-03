@@ -12,7 +12,6 @@ class UserModel {
   final String fcmToken;
   final bool notificationsEnabled;
   final bool groupAlertsEnabled;
-  final int pomodoroDuration;
   final DateTime createdAt;
 
   UserModel({
@@ -24,7 +23,6 @@ class UserModel {
     required this.fcmToken,
     required this.notificationsEnabled,
     required this.groupAlertsEnabled,
-    required this.pomodoroDuration,
     required this.createdAt,
   });
 
@@ -37,7 +35,6 @@ class UserModel {
         'fcmToken': fcmToken,
         'notificationsEnabled': notificationsEnabled,
         'groupAlertsEnabled': groupAlertsEnabled,
-        'pomodoroDuration': pomodoroDuration,
         'createdAt': Timestamp.fromDate(createdAt),
       };
 
@@ -50,7 +47,6 @@ class UserModel {
         fcmToken: map['fcmToken'] ?? '',
         notificationsEnabled: map['notificationsEnabled'] ?? true,
         groupAlertsEnabled: map['groupAlertsEnabled'] ?? true,
-        pomodoroDuration: map['pomodoroDuration'] ?? 25,
         createdAt:
             (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       );

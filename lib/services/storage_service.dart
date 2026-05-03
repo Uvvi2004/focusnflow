@@ -38,23 +38,4 @@ class StorageService {
     }
   }
 
-  // Upload group cover image
-  Future<String?> uploadGroupImage(File file, String groupId) async {
-    try {
-      final ref =
-          _storage.ref().child('groups/$groupId/cover.jpg');
-      await ref.putFile(file);
-      final url = await ref.getDownloadURL();
-
-      // Save URL to Firestore
-      await FirebaseFirestore.instance
-          .collection('groups')
-          .doc(groupId)
-          .set({'coverImageUrl': url}, SetOptions(merge: true));
-
-      return url;
-    } catch (e) {
-      return null;
-    }
-  }
 }

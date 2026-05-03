@@ -82,7 +82,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   courseTag: courseController.text.trim(),
                   description: descController.text.trim(),
                   members: [_user.uid],
-                  coverImageUrl: '',
                   createdBy: _user.uid,
                   createdAt: DateTime.now(),
                 );
