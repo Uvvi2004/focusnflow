@@ -5,6 +5,7 @@ import '../tasks/tasks_screen.dart';
 import '../rooms/rooms_screen.dart';
 import '../groups/groups_screen.dart';
 import '../profile/profile_screen.dart';
+import '../../models/task_model.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -368,23 +369,21 @@ class HomeDashboard extends StatelessWidget {
 
                 return Column(
                   children: top.map((task) {
-                    final score =
-                        (task['priorityScore'] as num).toDouble();
                     final deadline =
                         (task['deadline'] as Timestamp).toDate();
+                    final weight =
+                        (task['courseWeight'] as num).toDouble();
                     final daysLeft =
                         deadline.difference(DateTime.now()).inDays;
+                    final priorityLabel =
+                        TaskModel.getPriorityLabel(deadline, weight);
                     Color priorityColor;
-                    String priorityLabel;
-                    if (score >= 70) {
+                    if (priorityLabel == 'High') {
                       priorityColor = Colors.redAccent;
-                      priorityLabel = 'High';
-                    } else if (score >= 40) {
+                    } else if (priorityLabel == 'Med') {
                       priorityColor = Colors.orangeAccent;
-                      priorityLabel = 'Med';
                     } else {
                       priorityColor = Colors.greenAccent;
-                      priorityLabel = 'Low';
                     }
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
