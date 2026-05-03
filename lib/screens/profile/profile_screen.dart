@@ -31,6 +31,246 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _uploadingAvatar = false);
   }
 
+  void _showNotificationPreferences(bool currentValue) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Notification Preferences',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: _textColor,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _bgColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Deadline Reminders',
+                          style: TextStyle(
+                            color: _textColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Get notified about upcoming tasks',
+                          style: TextStyle(
+                              color: _subtextColor, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    Switch(
+                      value: currentValue,
+                      onChanged: (val) async {
+                        setSheetState(() => currentValue = val);
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(_user!.uid)
+                            .set({
+                          'notificationsEnabled': val
+                        }, SetOptions(merge: true));
+                      },
+                      activeColor: _accentColor,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _bgColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Group Session Alerts',
+                          style: TextStyle(
+                            color: _textColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Get notified about new group sessions',
+                          style: TextStyle(
+                              color: _subtextColor, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    Switch(
+                      value: currentValue,
+                      onChanged: (val) async {
+                        setSheetState(() => currentValue = val);
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(_user!.uid)
+                            .set({
+                          'groupAlertsEnabled': val
+                        }, SetOptions(merge: true));
+                      },
+                      activeColor: _accentColor,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFocusModeSettings(int currentDuration) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Focus Mode Settings',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: _textColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Set your default Pomodoro session duration',
+                style: TextStyle(color: _subtextColor, fontSize: 13),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [25, 45, 60].map((mins) {
+                  final selected = currentDuration == mins;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () async {
+                          setSheetState(() => currentDuration = mins);
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(_user!.uid)
+                              .set({
+                            'pomodoroDuration': mins
+                          }, SetOptions(merge: true));
+                        },
+                        child: Container(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? _accentColor
+                                : _bgColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: selected
+                                  ? _accentColor
+                                  : Colors.white10,
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                '$mins',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: selected
+                                      ? Colors.white
+                                      : _textColor,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'min',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: selected
+                                      ? Colors.white70
+                                      : _subtextColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _accentColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: _accentColor.withOpacity(0.2)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        color: _accentColor, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This setting applies to your personal Pomodoro sessions. Group timers use 25 min by default.',
+                        style:
+                            TextStyle(color: _subtextColor, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -51,6 +291,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               final email = data['email'] ?? _user.email ?? '';
               final courses = List<String>.from(data['courses'] ?? []);
               final photoURL = data['photoURL'] ?? '';
+              final notificationsEnabled =
+                  data['notificationsEnabled'] ?? true;
+              final pomodoroDuration = data['pomodoroDuration'] ?? 25;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -121,8 +364,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     border: Border.all(
                                         color: _bgColor, width: 2),
                                   ),
-                                  child: const Icon(Icons.camera_alt_rounded,
-                                      size: 12, color: Colors.white),
+                                  child: const Icon(
+                                      Icons.camera_alt_rounded,
+                                      size: 12,
+                                      color: Colors.white),
                                 ),
                               ),
                             ],
@@ -148,15 +393,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 8),
                         const Text(
                           'Tap avatar to change photo',
-                          style: TextStyle(
-                              color: _subtextColor, fontSize: 12),
+                          style:
+                              TextStyle(color: _subtextColor, fontSize: 12),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 32),
 
-                  // Courses section
+                  // Courses
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -257,19 +502,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _SettingsRow(
                     icon: Icons.notifications_none_rounded,
                     label: 'Notification Preferences',
-                    onTap: () {},
+                    onTap: () => _showNotificationPreferences(
+                        notificationsEnabled),
                   ),
                   const SizedBox(height: 8),
                   _SettingsRow(
                     icon: Icons.timer_outlined,
-                    label: 'Focus Mode Settings',
-                    onTap: () {},
-                  ),
-                  const SizedBox(height: 8),
-                  _SettingsRow(
-                    icon: Icons.help_outline_rounded,
-                    label: 'Help & Support',
-                    onTap: () {},
+                    label:
+                        'Focus Mode — ${pomodoroDuration}min sessions',
+                    onTap: () =>
+                        _showFocusModeSettings(pomodoroDuration),
                   ),
                   const SizedBox(height: 32),
 
@@ -279,10 +521,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: ElevatedButton(
                       onPressed: () => _authService.signOut(),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent.withOpacity(0.15),
+                        backgroundColor:
+                            Colors.redAccent.withOpacity(0.15),
                         foregroundColor: Colors.redAccent,
                         elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
