@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../tasks/tasks_screen.dart';
 import '../rooms/rooms_screen.dart';
 import '../groups/groups_screen.dart';
@@ -15,12 +16,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  static const _bgColor = Color(0xFF0F1117);
-  static const _cardColor = Color(0xFF1A1D2E);
-  static const _accentColor = Color(0xFF4F8EF7);
-  static const _textColor = Color(0xFFE8EAED);
-  static const _subtextColor = Color(0xFF9AA0A6);
-
   final List<Widget> _screens = [
     const HomeDashboard(),
     const TasksScreen(),
@@ -29,13 +24,17 @@ class _HomeScreenState extends State<HomeScreen> {
     const ProfileScreen(),
   ];
 
+  static const _cardColor = Color(0xFF1A1D2E);
+  static const _accentColor = Color(0xFF4F8EF7);
+  static const _subtextColor = Color(0xFF9AA0A6);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgColor,
+      backgroundColor: const Color(0xFF0F1117),
       body: _screens[_currentIndex],
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: _cardColor,
           border: Border(top: BorderSide(color: Colors.white10)),
         ),
@@ -102,7 +101,7 @@ class HomeDashboard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Hi, ${user?.displayName ?? 'Student'}!',
+                      'Hi, ${user?.displayName ?? 'Student'} 👋',
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -122,7 +121,8 @@ class HomeDashboard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: _accentColor.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _accentColor.withOpacity(0.3)),
+                    border:
+                        Border.all(color: _accentColor.withOpacity(0.3)),
                   ),
                   child: const Icon(Icons.notifications_none_rounded,
                       color: _accentColor),
@@ -131,34 +131,69 @@ class HomeDashboard extends StatelessWidget {
             ),
             const SizedBox(height: 28),
 
-            // Stats row
-            Row(
-              children: [
-                _StatCard(
-                  label: 'Tasks Due',
-                  value: '3',
-                  icon: Icons.task_alt_rounded,
-                  color: Colors.orangeAccent,
-                ),
-                const SizedBox(width: 12),
-                _StatCard(
-                  label: 'Open Rooms',
-                  value: '5',
-                  icon: Icons.meeting_room_rounded,
-                  color: Colors.greenAccent,
-                ),
-                const SizedBox(width: 12),
-                _StatCard(
-                  label: 'My Groups',
-                  value: '2',
-                  icon: Icons.group_rounded,
-                  color: _accentColor,
-                ),
-              ],
+            // Real-time stats row
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('tasks')
+                  .where('userId', isEqualTo: user?.uid)
+                  .where('completed', isEqualTo: false)
+                  .snapshots(),
+              builder: (context, taskSnap) {
+                return StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('rooms')
+                      .where('status', isEqualTo: 'open')
+                      .snapshots(),
+                  builder: (context, roomSnap) {
+                    return StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('groups')
+                          .snapshots(),
+                      builder: (context, groupSnap) {
+                        final taskCount =
+                            taskSnap.data?.docs.length ?? 0;
+                        final roomCount =
+                            roomSnap.data?.docs.length ?? 0;
+                        final groupCount = groupSnap.data?.docs
+                                .where((d) => (d.data()
+                                        as Map<String, dynamic>)['members']
+                                    .contains(user?.uid))
+                                .length ??
+                            0;
+
+                        return Row(
+                          children: [
+                            _StatCard(
+                              label: 'Tasks Due',
+                              value: taskCount.toString(),
+                              icon: Icons.task_alt_rounded,
+                              color: Colors.orangeAccent,
+                            ),
+                            const SizedBox(width: 12),
+                            _StatCard(
+                              label: 'Open Rooms',
+                              value: roomCount.toString(),
+                              icon: Icons.meeting_room_rounded,
+                              color: Colors.greenAccent,
+                            ),
+                            const SizedBox(width: 12),
+                            _StatCard(
+                              label: 'My Groups',
+                              value: groupCount.toString(),
+                              icon: Icons.group_rounded,
+                              color: _accentColor,
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                );
+              },
             ),
             const SizedBox(height: 28),
 
-            // Today's priorities
+            // Today's priorities from Firestore
             const Text(
               "Today's Priorities",
               style: TextStyle(
@@ -168,29 +203,74 @@ class HomeDashboard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('tasks')
+                  .where('userId', isEqualTo: user?.uid)
+                  .where('completed', isEqualTo: false)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _cardColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'No tasks yet — go to Tasks tab to add one',
+                        style: TextStyle(color: _subtextColor),
+                      ),
+                    ),
+                  );
+                }
 
-            _PriorityTaskCard(
-              course: 'CS450',
-              title: 'Assignment 2',
-              dueDate: 'Due Nov 20',
-              priority: 'High',
-              priorityColor: Colors.redAccent,
-            ),
-            const SizedBox(height: 10),
-            _PriorityTaskCard(
-              course: 'MATH201',
-              title: 'Homework 5',
-              dueDate: 'Due Nov 21',
-              priority: 'Med',
-              priorityColor: Colors.orangeAccent,
-            ),
-            const SizedBox(height: 10),
-            _PriorityTaskCard(
-              course: 'ART110',
-              title: 'Project Draft',
-              dueDate: 'Due Nov 30',
-              priority: 'Low',
-              priorityColor: Colors.greenAccent,
+                final docs = snapshot.data!.docs;
+                final tasks = docs.map((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  return data;
+                }).toList();
+
+                tasks.sort((a, b) => (b['priorityScore'] as num)
+                    .compareTo(a['priorityScore'] as num));
+
+                final top = tasks.take(3).toList();
+
+                return Column(
+                  children: top.map((task) {
+                    final score =
+                        (task['priorityScore'] as num).toDouble();
+                    final deadline =
+                        (task['deadline'] as Timestamp).toDate();
+                    final daysLeft =
+                        deadline.difference(DateTime.now()).inDays;
+                    Color priorityColor;
+                    String priorityLabel;
+                    if (score >= 70) {
+                      priorityColor = Colors.redAccent;
+                      priorityLabel = 'High';
+                    } else if (score >= 40) {
+                      priorityColor = Colors.orangeAccent;
+                      priorityLabel = 'Med';
+                    } else {
+                      priorityColor = Colors.greenAccent;
+                      priorityLabel = 'Low';
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _PriorityTaskCard(
+                        course: task['courseName'] ?? '',
+                        title: task['title'] ?? '',
+                        dueDate: '$daysLeft days left',
+                        priority: priorityLabel,
+                        priorityColor: priorityColor,
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
             ),
             const SizedBox(height: 28),
 
@@ -235,15 +315,16 @@ class HomeDashboard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: _accentColor.withOpacity(0.2)),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  const Icon(Icons.lightbulb_outline_rounded,
+                  Icon(Icons.lightbulb_outline_rounded,
                       color: _accentColor, size: 20),
-                  const SizedBox(width: 12),
-                  const Expanded(
+                  SizedBox(width: 12),
+                  Expanded(
                     child: Text(
                       'Tip: Break your highest priority task into 25-min Pomodoro sessions for maximum focus.',
-                      style: TextStyle(color: _subtextColor, fontSize: 13),
+                      style:
+                          TextStyle(color: _subtextColor, fontSize: 13),
                     ),
                   ),
                 ],
@@ -270,7 +351,6 @@ class _StatCard extends StatelessWidget {
   });
 
   static const _cardColor = Color(0xFF1A1D2E);
-  static const _textColor = Color(0xFFE8EAED);
   static const _subtextColor = Color(0xFF9AA0A6);
 
   @override
@@ -290,10 +370,13 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(value,
                 style: TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: color)),
             const SizedBox(height: 2),
             Text(label,
-                style: const TextStyle(fontSize: 11, color: _subtextColor)),
+                style:
+                    const TextStyle(fontSize: 11, color: _subtextColor)),
           ],
         ),
       ),
@@ -332,7 +415,8 @@ class _PriorityTaskCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: priorityColor.withOpacity(0.15),
               borderRadius: BorderRadius.circular(8),
@@ -359,8 +443,8 @@ class _PriorityTaskCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(dueDate,
-                    style:
-                        const TextStyle(color: _subtextColor, fontSize: 12)),
+                    style: const TextStyle(
+                        color: _subtextColor, fontSize: 12)),
               ],
             ),
           ),
@@ -404,8 +488,8 @@ class _QuickAction extends StatelessWidget {
               Icon(icon, color: _accentColor, size: 24),
               const SizedBox(height: 6),
               Text(label,
-                  style:
-                      const TextStyle(color: _subtextColor, fontSize: 11)),
+                  style: const TextStyle(
+                      color: _subtextColor, fontSize: 11)),
             ],
           ),
         ),
