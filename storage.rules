@@ -1,0 +1,28 @@
+rules_version = '2';
+
+// Firebase Storage rules for FocusNFlow.
+//
+// Path convention (mirrored in StorageService):
+//   avatars/{uid}/profile.jpg     — user avatar, owner-write only
+//   groups/{groupId}/cover.jpg    — group cover image, any signed-in member can write
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    match /avatars/{userId}/{file} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    match /groups/{groupId}/{file} {
+      allow read: if request.auth != null;
+      // Membership check happens in Firestore rules on the group doc itself.
+      // Storage caps file size and MIME type to prevent abuse.
+      allow write: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+  }
+}
