@@ -25,11 +25,19 @@ class TaskModel {
     required this.createdAt,
   });
 
-  // Priority score formula
+  static String getPriorityLabel(DateTime deadline, double courseWeight) {
+    final daysLeft = deadline.difference(DateTime.now()).inDays;
+    if (daysLeft <= 3) return 'High';
+    if (daysLeft <= 7 && courseWeight >= 15) return 'High';
+    if (courseWeight >= 15) return 'Med';
+    if (daysLeft <= 14) return 'Med';
+    return 'Low';
+  }
+
   static double calculatePriority(
       DateTime deadline, double estimatedHours, double courseWeight) {
-    final daysUntilDeadline = deadline.difference(DateTime.now()).inDays;
-    final urgencyScore = (100 - daysUntilDeadline).clamp(0, 100).toDouble();
+    final daysLeft = deadline.difference(DateTime.now()).inDays;
+    final urgencyScore = (100 - daysLeft).clamp(0, 100).toDouble();
     final effortScore = (1 / estimatedHours * 10).clamp(0, 100).toDouble();
     return (urgencyScore * 0.5) + (courseWeight * 0.3) + (effortScore * 0.2);
   }
