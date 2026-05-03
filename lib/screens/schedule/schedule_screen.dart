@@ -1,0 +1,416 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../models/task_model.dart';
+import '../../services/firestore_service.dart';
+
+// Implements the FocusNFlow final-project requirement:
+//   "generate a weekly schedule with conflict checks and auto-adjustment
+//    suggestions" using the priority engine in TaskModel.
+//
+// Algorithm (greedy, priority-first):
+//   1. Sort tasks by priorityScore DESC so the most urgent work fills the
+//      earliest available slots.
+//   2. For each task, walk from today through min(deadline-1, today+6) and
+//      assign as many hours as the daily cap allows until the task is fully
+//      scheduled.
+//   3. Any hours that still can't fit before the deadline are flagged as a
+//      conflict with a plain-language suggestion.
+class ScheduleScreen extends StatelessWidget {
+  const ScheduleScreen({super.key});
+
+  // Maximum study hours the algorithm will assign to a single day.
+  static const double _dailyCap = 4.0;
+
+  static const _bgColor = Color(0xFF0F1117);
+  static const _cardColor = Color(0xFF1A1D2E);
+  static const _accentColor = Color(0xFF4F8EF7);
+  static const _textColor = Color(0xFFE8EAED);
+  static const _subtextColor = Color(0xFF9AA0A6);
+
+  static _ScheduleResult _buildSchedule(List<TaskModel> tasks) {
+    final today = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
+
+    final hoursUsed = List<double>.filled(7, 0.0);
+    final daySlots = List<List<_TaskSlot>>.generate(7, (_) => []);
+    final conflicts = <_Conflict>[];
+
+    final sorted = [...tasks]
+      ..sort((a, b) => b.priorityScore.compareTo(a.priorityScore));
+
+    for (final task in sorted) {
+      double remaining = task.estimatedHours;
+
+      // Deadline day index relative to today (0 = today, 1 = tomorrow, …).
+      // Clamp to the 7-day window; schedule up to the day BEFORE the deadline
+      // (so the student has the deadline day as a buffer).
+      final deadlineDay = task.deadline.difference(today).inDays;
+      final lastDay = (deadlineDay - 1).clamp(0, 6);
+
+      for (int d = 0; d <= lastDay && remaining > 0.01; d++) {
+        final available = _dailyCap - hoursUsed[d];
+        if (available <= 0.01) continue;
+        final assign = remaining < available ? remaining : available;
+        hoursUsed[d] += assign;
+        daySlots[d].add(_TaskSlot(task: task, hours: assign));
+        remaining -= assign;
+      }
+
+      if (remaining > 0.01) {
+        final String suggestion;
+        if (deadlineDay <= 0) {
+          suggestion = 'Task is overdue — complete it immediately.';
+        } else if (deadlineDay == 1) {
+          suggestion =
+              'Due tomorrow. Start now to cover ${remaining.toStringAsFixed(1)}h.';
+        } else {
+          suggestion =
+              'Reduce other tasks or extend daily cap to fit the remaining '
+              '${remaining.toStringAsFixed(1)}h before the deadline.';
+        }
+        conflicts.add(_Conflict(
+          task: task,
+          unscheduledHours: remaining,
+          suggestion: suggestion,
+        ));
+      }
+    }
+
+    return _ScheduleResult(
+      days: List.generate(
+        7,
+        (i) => _DayPlan(
+          date: today.add(Duration(days: i)),
+          totalHours: hoursUsed[i],
+          slots: daySlots[i],
+        ),
+      ),
+      conflicts: conflicts,
+    );
+  }
+
+  static Color _priorityColor(TaskModel task) {
+    final label = TaskModel.getPriorityLabel(task.deadline, task.courseWeight);
+    if (label == 'High') return Colors.redAccent;
+    if (label == 'Med') return Colors.orangeAccent;
+    return Colors.greenAccent;
+  }
+
+  static String _dayLabel(int index, DateTime date) {
+    if (index == 0) return 'Today';
+    if (index == 1) return 'Tomorrow';
+    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return '${names[date.weekday - 1]} ${date.day}/${date.month}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser!;
+
+    return Scaffold(
+      backgroundColor: _bgColor,
+      appBar: AppBar(
+        backgroundColor: _bgColor,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: _textColor),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Weekly Schedule',
+                style: TextStyle(
+                    color: _textColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
+            Text('Priority-first · 4h/day cap',
+                style: TextStyle(color: _subtextColor, fontSize: 12)),
+          ],
+        ),
+      ),
+      body: StreamBuilder<List<TaskModel>>(
+        stream: FirestoreService().getTasks(user.uid),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.calendar_today_rounded,
+                      color: _subtextColor, size: 48),
+                  const SizedBox(height: 16),
+                  const Text('No tasks to schedule',
+                      style: TextStyle(color: _subtextColor)),
+                  const SizedBox(height: 8),
+                  const Text('Add tasks from the Tasks tab first',
+                      style: TextStyle(color: _subtextColor, fontSize: 13)),
+                ],
+              ),
+            );
+          }
+
+          final result = _buildSchedule(snapshot.data!);
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── 7-day grid ──────────────────────────────────────────
+                ...List.generate(7, (i) {
+                  final day = result.days[i];
+                  final overloaded = day.totalHours > _dailyCap;
+
+                  final Color loadColor;
+                  if (day.totalHours == 0) {
+                    loadColor = _subtextColor;
+                  } else if (day.totalHours <= 2) {
+                    loadColor = Colors.greenAccent;
+                  } else if (!overloaded) {
+                    loadColor = Colors.orangeAccent;
+                  } else {
+                    loadColor = Colors.redAccent;
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: _cardColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: overloaded
+                              ? Colors.redAccent.withValues(alpha: 0.4)
+                              : i == 0
+                                  ? _accentColor.withValues(alpha: 0.3)
+                                  : Colors.white10,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _dayLabel(i, day.date),
+                                style: TextStyle(
+                                  color: i == 0 ? _accentColor : _textColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: loadColor.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  day.totalHours == 0
+                                      ? 'Free'
+                                      : '${day.totalHours.toStringAsFixed(1)}h',
+                                  style: TextStyle(
+                                    color: loadColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (day.slots.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            ...day.slots.map((slot) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      // Priority colour bar
+                                      Container(
+                                        width: 3,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: _priorityColor(slot.task),
+                                          borderRadius:
+                                              BorderRadius.circular(2),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${slot.task.courseName} — ${slot.task.title}',
+                                              style: const TextStyle(
+                                                color: _textColor,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${slot.hours.toStringAsFixed(1)}h  •  due ${slot.task.deadline.day}/${slot.task.deadline.month}',
+                                              style: const TextStyle(
+                                                  color: _subtextColor,
+                                                  fontSize: 11),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )),
+                          ] else
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text('Nothing scheduled',
+                                  style: const TextStyle(
+                                      color: _subtextColor, fontSize: 13)),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+
+                const SizedBox(height: 8),
+
+                // ── Conflicts & suggestions ──────────────────────────────
+                if (result.conflicts.isNotEmpty) ...[
+                  const Text('Conflict Warnings',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: _textColor)),
+                  const SizedBox(height: 4),
+                  const Text(
+                      'These tasks cannot be fully scheduled before their deadline.',
+                      style: TextStyle(color: _subtextColor, fontSize: 13)),
+                  const SizedBox(height: 12),
+                  ...result.conflicts.map((c) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color:
+                                    Colors.redAccent.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.warning_amber_rounded,
+                                  color: Colors.redAccent, size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${c.task.courseName} — ${c.task.title}',
+                                      style: const TextStyle(
+                                          color: _textColor,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${c.unscheduledHours.toStringAsFixed(1)}h cannot fit before deadline',
+                                      style: const TextStyle(
+                                          color: Colors.redAccent,
+                                          fontSize: 12),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Suggestion: ${c.suggestion}',
+                                      style: const TextStyle(
+                                          color: _subtextColor, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.greenAccent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: Colors.greenAccent.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.check_circle_rounded,
+                            color: Colors.greenAccent, size: 18),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'All tasks fit within the 7-day window. No conflicts.',
+                            style: TextStyle(
+                                color: Colors.greenAccent, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Internal data classes ───────────────────────────────────────────────────
+
+class _TaskSlot {
+  final TaskModel task;
+  final double hours;
+  const _TaskSlot({required this.task, required this.hours});
+}
+
+class _DayPlan {
+  final DateTime date;
+  final double totalHours;
+  final List<_TaskSlot> slots;
+  const _DayPlan(
+      {required this.date, required this.totalHours, required this.slots});
+}
+
+class _Conflict {
+  final TaskModel task;
+  final double unscheduledHours;
+  final String suggestion;
+  const _Conflict(
+      {required this.task,
+      required this.unscheduledHours,
+      required this.suggestion});
+}
+
+class _ScheduleResult {
+  final List<_DayPlan> days;
+  final List<_Conflict> conflicts;
+  const _ScheduleResult({required this.days, required this.conflicts});
+}
