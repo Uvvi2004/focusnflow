@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/group_model.dart';
 import '../../services/firestore_service.dart';
+import '../../services/fcm_service.dart';
 import 'pomodoro_screen.dart';
 
 class GroupsScreen extends StatefulWidget {
@@ -265,6 +266,26 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   if (picked != null) {
                     await _firestoreService.updateNextSession(
                         group.groupId, picked);
+
+                    final fcm = FCMService();
+                    // Notify all members the session has been scheduled.
+                    await fcm.sendGroupSessionScheduled(
+                      groupName: group.name,
+                      sessionDate: picked,
+                      memberUids: group.members,
+                    );
+                    // Also send the 24-hour reminder right away if the
+                    // session is already within the next 25 hours.
+                    final hoursUntil =
+                        picked.difference(DateTime.now()).inHours;
+                    if (hoursUntil <= 25 && hoursUntil > 0) {
+                      await fcm.sendGroupSession24HourReminder(
+                        groupName: group.name,
+                        sessionDate: picked,
+                        memberUids: group.members,
+                      );
+                    }
+
                     if (context.mounted) Navigator.pop(context);
                   }
                 },
@@ -553,11 +574,23 @@ class _GroupCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     '${group.members.length} member${group.members.length == 1 ? '' : 's'} · ${group.courseTag}',
-                    style: const TextStyle(
-                      color: _subtextColor,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: _subtextColor, fontSize: 12),
                   ),
+                  if (group.nextSession != null) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.calendar_today_rounded,
+                            color: _accentColor, size: 11),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Next: ${group.nextSession!.day}/${group.nextSession!.month}/${group.nextSession!.year}',
+                          style: const TextStyle(
+                              color: _accentColor, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
