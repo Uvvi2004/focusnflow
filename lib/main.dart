@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
@@ -14,13 +15,35 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 }
 
-// Global key so the foreground FCM listener can show a SnackBar from
-// outside the widget tree without needing a BuildContext.
-final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+final FlutterLocalNotificationsPlugin _localNotifications =
+    FlutterLocalNotificationsPlugin();
+
+const AndroidNotificationChannel _defaultChannel = AndroidNotificationChannel(
+  'focusnflow_default_channel',
+  'FocusNFlow Notifications',
+  description: 'General notifications for FocusNFlow',
+  importance: Importance.max,
+);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+  await _localNotifications.initialize(
+    const InitializationSettings(android: androidSettings),
+  );
+  await _localNotifications
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_defaultChannel);
+
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   runApp(const MyApp());
 }
@@ -35,25 +58,43 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   final _fcmService = FCMService();
 
+  Future<void> _syncInitialAndOpenedMessagesToBell() async {
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      _fcmService.storeIncomingMessageForBell(message);
+    });
+
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      await _fcmService.storeIncomingMessageForBell(initialMessage);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _fcmService.initialize();
+    _syncInitialAndOpenedMessagesToBell();
 
-    // Foreground messages: the OS does not display a notification banner while
-    // the app is open, so we surface it as an in-app SnackBar instead.
+    // Foreground messages are shown as local notifications so behavior matches
+    // background/closed notifications and avoids SnackBars.
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      _fcmService.storeIncomingMessageForBell(message);
       final n = message.notification;
       if (n == null) return;
       final title = n.title ?? '';
       final body = n.body ?? '';
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text(
-            [title, body].where((s) => s.isNotEmpty).join('\n'),
+      _localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title,
+        body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'focusnflow_default_channel',
+            'FocusNFlow Notifications',
+            channelDescription: 'General notifications for FocusNFlow',
+            importance: Importance.max,
+            priority: Priority.high,
           ),
-          duration: const Duration(seconds: 4),
-          behavior: SnackBarBehavior.floating,
         ),
       );
     });
@@ -64,7 +105,6 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'FocusNFlow',
       debugShowCheckedModeBanner: false,
-      scaffoldMessengerKey: _scaffoldMessengerKey,
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0F1117),

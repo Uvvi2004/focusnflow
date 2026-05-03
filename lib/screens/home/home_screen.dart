@@ -75,95 +75,126 @@ class HomeDashboard extends StatelessWidget {
   void _showNotificationsSheet(BuildContext context, String userId) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: _cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Notifications',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _textColor)),
-            const SizedBox(height: 16),
-            StreamBuilder<QuerySnapshot>(
-              // Filter by recipient so each user only sees their own alerts.
-              // Requires the composite index in firestore.indexes.json.
-              stream: FirebaseFirestore.instance
-                  .collection('notifications')
-                  .where('recipients', arrayContains: userId)
-                  .orderBy('createdAt', descending: true)
-                  .limit(10)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(
-                      child: Text('No notifications yet',
-                          style: TextStyle(color: _subtextColor)),
-                    ),
-                  );
-                }
-                final notifs = snapshot.data!.docs;
-                return ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: notifs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final data = notifs[index].data() as Map<String, dynamic>;
-                    final title = data['title'] ?? '';
-                    final body = data['body'] ?? '';
-                    final type = data['type'] ?? 'general';
-                    final icon = type == 'deadline' ? Icons.timer_rounded : Icons.group_rounded;
-                    final color = type == 'deadline' ? Colors.orangeAccent : _accentColor;
-                    return Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: _bgColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white10),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 36, height: 36,
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(icon, color: color, size: 18),
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.8,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Notifications',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _textColor),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('notifications')
+                      .where('recipients', arrayContains: userId)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Unable to load notifications.\n${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.redAccent),
+                        ),
+                      );
+                    }
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final docs = snapshot.data?.docs ?? const [];
+                    if (docs.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'No notifications yet',
+                          style: TextStyle(color: _subtextColor),
+                        ),
+                      );
+                    }
+
+                    final notifs = docs.toList()
+                      ..sort((a, b) {
+                        final aData = a.data() as Map<String, dynamic>;
+                        final bData = b.data() as Map<String, dynamic>;
+                        final aCreatedAt = aData['createdAt'] as Timestamp?;
+                        final bCreatedAt = bData['createdAt'] as Timestamp?;
+                        return (bCreatedAt?.millisecondsSinceEpoch ?? 0)
+                            .compareTo(aCreatedAt?.millisecondsSinceEpoch ?? 0);
+                      });
+
+                    return ListView.separated(
+                      itemCount: notifs.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final data = notifs[index].data() as Map<String, dynamic>;
+                        final title = data['title'] ?? '';
+                        final body = data['body'] ?? '';
+                        final type = data['type'] ?? 'general';
+                        final icon = type == 'deadline' ? Icons.timer_rounded : Icons.group_rounded;
+                        final color = type == 'deadline' ? Colors.orangeAccent : _accentColor;
+
+                        return Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: _bgColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white10),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(title,
-                                    style: const TextStyle(
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(icon, color: color, size: 18),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      title,
+                                      style: const TextStyle(
                                         color: _textColor,
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 13)),
-                                const SizedBox(height: 2),
-                                Text(body,
-                                    style: const TextStyle(
-                                        color: _subtextColor, fontSize: 12)),
-                              ],
-                            ),
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      body,
+                                      style: const TextStyle(
+                                        color: _subtextColor,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
-          ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

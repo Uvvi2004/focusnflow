@@ -20,6 +20,38 @@ import 'package:firebase_auth/firebase_auth.dart';
 class FCMService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
+  Future<void> storeIncomingMessageForBell(RemoteMessage message) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final title =
+        message.notification?.title ?? (message.data['title'] as String?) ?? '';
+    final body =
+        message.notification?.body ?? (message.data['body'] as String?) ?? '';
+
+    if (title.isEmpty && body.isEmpty) return;
+
+    final type = (message.data['type'] as String?) ?? 'campaign';
+    final messageId = message.messageId;
+
+    final payload = {
+      'title': title,
+      'body': body,
+      'recipients': [uid],
+      'createdAt': Timestamp.now(),
+      'type': type,
+      'source': 'fcm',
+    };
+
+    final notifications = FirebaseFirestore.instance.collection('notifications');
+    if (messageId != null && messageId.isNotEmpty) {
+      await notifications.doc('fcm_$messageId').set(payload, SetOptions(merge: true));
+      return;
+    }
+
+    await notifications.add(payload);
+  }
+
   Future<void> initialize() async {
     await _messaging.requestPermission(
       alert: true,
