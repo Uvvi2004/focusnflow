@@ -14,7 +14,9 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
   final _storageService = StorageService();
-  final _user = FirebaseAuth.instance.currentUser;
+  // ProfileScreen is only reachable when the auth stream emits a non-null
+  // user, so the bang here is safe — see main.dart's StreamBuilder guard.
+  final _user = FirebaseAuth.instance.currentUser!;
   bool _uploadingAvatar = false;
 
   static const _bgColor = Color(0xFF0F1117);
@@ -27,11 +29,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final file = await _storageService.pickImage();
     if (file == null) return;
     setState(() => _uploadingAvatar = true);
-    await _storageService.uploadAvatar(file, _user!.uid);
+    await _storageService.uploadAvatar(file, _user.uid);
     setState(() => _uploadingAvatar = false);
   }
 
-  void _showNotificationPreferences(bool currentValue) {
+  // Each preference toggle gets its own local state variable so that
+  // toggling one switch doesn't visually flip the other.
+  void _showNotificationPreferences(
+      bool deadlineEnabled, bool groupAlertsEnabled) {
     showModalBottomSheet(
       context: context,
       backgroundColor: _cardColor,
@@ -45,105 +50,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Notification Preferences',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: _textColor,
-                ),
-              ),
+              const Text('Notification Preferences',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: _textColor)),
               const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _bgColor,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Deadline Reminders',
-                          style: TextStyle(
-                            color: _textColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Get notified about upcoming tasks',
-                          style: TextStyle(
-                              color: _subtextColor, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    Switch(
-                      value: currentValue,
-                      onChanged: (val) async {
-                        setSheetState(() => currentValue = val);
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(_user!.uid)
-                            .set({
-                          'notificationsEnabled': val
-                        }, SetOptions(merge: true));
-                      },
-                      activeColor: _accentColor,
-                    ),
-                  ],
-                ),
+              _PrefRow(
+                title: 'Deadline Reminders',
+                subtitle: 'Get notified about upcoming tasks',
+                value: deadlineEnabled,
+                onChanged: (val) async {
+                  setSheetState(() => deadlineEnabled = val);
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(_user.uid)
+                      .set({'notificationsEnabled': val},
+                          SetOptions(merge: true));
+                },
               ),
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _bgColor,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Group Session Alerts',
-                          style: TextStyle(
-                            color: _textColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Get notified about new group sessions',
-                          style: TextStyle(
-                              color: _subtextColor, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    Switch(
-                      value: currentValue,
-                      onChanged: (val) async {
-                        setSheetState(() => currentValue = val);
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(_user!.uid)
-                            .set({
-                          'groupAlertsEnabled': val
-                        }, SetOptions(merge: true));
-                      },
-                      activeColor: _accentColor,
-                    ),
-                  ],
-                ),
+              _PrefRow(
+                title: 'Group Session Alerts',
+                subtitle: 'Get notified about new group sessions',
+                value: groupAlertsEnabled,
+                onChanged: (val) async {
+                  setSheetState(() => groupAlertsEnabled = val);
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(_user.uid)
+                      .set({'groupAlertsEnabled': val},
+                          SetOptions(merge: true));
+                },
               ),
             ],
           ),
@@ -152,124 +90,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showFocusModeSettings(int currentDuration) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: _cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Focus Mode Settings',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: _textColor,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Set your default Pomodoro session duration',
-                style: TextStyle(color: _subtextColor, fontSize: 13),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [25, 45, 60].map((mins) {
-                  final selected = currentDuration == mins;
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: GestureDetector(
-                        onTap: () async {
-                          setSheetState(() => currentDuration = mins);
-                          await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(_user!.uid)
-                              .set({
-                            'pomodoroDuration': mins
-                          }, SetOptions(merge: true));
-                        },
-                        child: Container(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? _accentColor
-                                : _bgColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: selected
-                                  ? _accentColor
-                                  : Colors.white10,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Text(
-                                '$mins',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: selected
-                                      ? Colors.white
-                                      : _textColor,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'min',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: selected
-                                      ? Colors.white70
-                                      : _subtextColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: _accentColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border:
-                      Border.all(color: _accentColor.withOpacity(0.2)),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded,
-                        color: _accentColor, size: 16),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'This setting applies to your personal Pomodoro sessions. Group timers use 25 min by default.',
-                        style:
-                            TextStyle(color: _subtextColor, fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')
-                .doc(_user!.uid)
+                .doc(_user.uid)
                 .snapshots(),
             builder: (context, snapshot) {
               final data =
@@ -293,22 +113,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               final photoURL = data['photoURL'] ?? '';
               final notificationsEnabled =
                   data['notificationsEnabled'] ?? true;
-              final pomodoroDuration = data['pomodoroDuration'] ?? 25;
+              final groupAlertsEnabled = data['groupAlertsEnabled'] ?? true;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Profile',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: _textColor,
-                    ),
-                  ),
+                  const Text('Profile',
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: _textColor)),
                   const SizedBox(height: 28),
 
-                  // Avatar
                   Center(
                     child: Column(
                       children: [
@@ -317,13 +133,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Stack(
                             children: [
                               Container(
-                                width: 80,
-                                height: 80,
+                                width: 80, height: 80,
                                 decoration: BoxDecoration(
-                                  color: _accentColor.withOpacity(0.15),
+                                  color: _accentColor.withValues(alpha: 0.15),
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                      color: _accentColor.withOpacity(0.3),
+                                      color: _accentColor.withValues(alpha: 0.3),
                                       width: 2),
                                 ),
                                 child: _uploadingAvatar
@@ -332,12 +147,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             strokeWidth: 2))
                                     : photoURL.isNotEmpty
                                         ? ClipOval(
-                                            child: Image.network(
-                                              photoURL,
-                                              width: 80,
-                                              height: 80,
-                                              fit: BoxFit.cover,
-                                            ),
+                                            child: Image.network(photoURL,
+                                                width: 80,
+                                                height: 80,
+                                                fit: BoxFit.cover),
                                           )
                                         : Center(
                                             child: Text(
@@ -345,84 +158,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                   ? name[0].toUpperCase()
                                                   : 'S',
                                               style: const TextStyle(
-                                                fontSize: 32,
-                                                fontWeight: FontWeight.bold,
-                                                color: _accentColor,
-                                              ),
+                                                  fontSize: 32,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: _accentColor),
                                             ),
                                           ),
                               ),
                               Positioned(
-                                bottom: 0,
-                                right: 0,
+                                bottom: 0, right: 0,
                                 child: Container(
-                                  width: 24,
-                                  height: 24,
+                                  width: 24, height: 24,
                                   decoration: BoxDecoration(
                                     color: _accentColor,
                                     shape: BoxShape.circle,
                                     border: Border.all(
                                         color: _bgColor, width: 2),
                                   ),
-                                  child: const Icon(
-                                      Icons.camera_alt_rounded,
-                                      size: 12,
-                                      color: Colors.white),
+                                  child: const Icon(Icons.camera_alt_rounded,
+                                      size: 12, color: Colors.white),
                                 ),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: _textColor,
-                          ),
-                        ),
+                        Text(name,
+                            style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: _textColor)),
                         const SizedBox(height: 4),
-                        Text(
-                          email,
-                          style: const TextStyle(
-                            color: _subtextColor,
-                            fontSize: 14,
-                          ),
-                        ),
+                        Text(email,
+                            style: const TextStyle(
+                                color: _subtextColor, fontSize: 14)),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Tap avatar to change photo',
-                          style:
-                              TextStyle(color: _subtextColor, fontSize: 12),
-                        ),
+                        const Text('Tap avatar to change photo',
+                            style:
+                                TextStyle(color: _subtextColor, fontSize: 12)),
                       ],
                     ),
                   ),
                   const SizedBox(height: 32),
 
-                  // Courses
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'My Courses',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: _textColor,
-                        ),
-                      ),
+                      const Text('My Courses',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: _textColor)),
                       GestureDetector(
                         onTap: () => _showAddCourseSheet(courses),
-                        child: const Text(
-                          '+ Add',
-                          style: TextStyle(
-                            color: _accentColor,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: const Text('+ Add',
+                            style: TextStyle(
+                                color: _accentColor,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600)),
                       ),
                     ],
                   ),
@@ -436,10 +228,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         border: Border.all(color: Colors.white10),
                       ),
                       child: const Center(
-                        child: Text(
-                          'No courses added yet — tap + Add',
-                          style: TextStyle(color: _subtextColor),
-                        ),
+                        child: Text('No courses added yet — tap + Add',
+                            style: TextStyle(color: _subtextColor)),
                       ),
                     )
                   else
@@ -449,11 +239,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: courses
                           .map((course) => GestureDetector(
                                 onLongPress: () async {
-                                  final updated = [...courses]
-                                    ..remove(course);
+                                  final updated = [...courses]..remove(course);
                                   await FirebaseFirestore.instance
                                       .collection('users')
-                                      .doc(_user!.uid)
+                                      .doc(_user.uid)
                                       .set({'courses': updated},
                                           SetOptions(merge: true));
                                 },
@@ -461,23 +250,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 14, vertical: 8),
                                   decoration: BoxDecoration(
-                                    color: _accentColor.withOpacity(0.1),
+                                    color: _accentColor.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                        color:
-                                            _accentColor.withOpacity(0.3)),
+                                        color: _accentColor.withValues(alpha: 0.3)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Text(
-                                        course,
-                                        style: const TextStyle(
-                                          color: _accentColor,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
+                                      Text(course,
+                                          style: const TextStyle(
+                                              color: _accentColor,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600)),
                                       const SizedBox(width: 6),
                                       const Icon(Icons.close,
                                           size: 14, color: _accentColor),
@@ -489,57 +274,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   const SizedBox(height: 32),
 
-                  // Settings
-                  const Text(
-                    'Settings',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: _textColor,
-                    ),
-                  ),
+                  const Text('Settings',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: _textColor)),
                   const SizedBox(height: 12),
                   _SettingsRow(
                     icon: Icons.notifications_none_rounded,
                     label: 'Notification Preferences',
                     onTap: () => _showNotificationPreferences(
-                        notificationsEnabled),
-                  ),
-                  const SizedBox(height: 8),
-                  _SettingsRow(
-                    icon: Icons.timer_outlined,
-                    label:
-                        'Focus Mode — ${pomodoroDuration}min sessions',
-                    onTap: () =>
-                        _showFocusModeSettings(pomodoroDuration),
+                        notificationsEnabled, groupAlertsEnabled),
                   ),
                   const SizedBox(height: 32),
 
-                  // Sign out
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () => _authService.signOut(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor:
-                            Colors.redAccent.withOpacity(0.15),
+                            Colors.redAccent.withValues(alpha: 0.15),
                         foregroundColor: Colors.redAccent,
                         elevation: 0,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
-                              color: Colors.redAccent.withOpacity(0.3)),
+                              color: Colors.redAccent.withValues(alpha: 0.3)),
                         ),
                       ),
-                      child: const Text(
-                        'Sign Out',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: const Text('Sign Out',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ],
@@ -553,7 +320,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _showAddCourseSheet(List<String> existingCourses) {
     final courseController = TextEditingController();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -563,23 +329,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       builder: (context) => Padding(
         padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 24,
+          left: 24, right: 24, top: 24,
           bottom: MediaQuery.of(context).viewInsets.bottom + 24,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Add Course',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: _textColor,
-              ),
-            ),
+            const Text('Add Course',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: _textColor)),
             const SizedBox(height: 20),
             Container(
               decoration: BoxDecoration(
@@ -594,43 +355,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   labelText: 'Course Code (e.g. CS450)',
                   labelStyle: TextStyle(color: _subtextColor),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 14),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
               ),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
-                if (courseController.text.isEmpty) return;
+                if (courseController.text.trim().isEmpty) return;
                 final updated = [
                   ...existingCourses,
                   courseController.text.trim()
                 ];
                 await FirebaseFirestore.instance
                     .collection('users')
-                    .doc(_user!.uid)
+                    .doc(_user.uid)
                     .set({'courses': updated}, SetOptions(merge: true));
-                if (mounted) Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accentColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                    borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text(
-                'Add Course',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
+              child: const Text('Add Course',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white)),
             ),
           ],
         ),
+      ),
+    ).whenComplete(courseController.dispose);
+  }
+}
+
+// Reusable preference row used inside the notifications bottom sheet.
+class _PrefRow extends StatelessWidget {
+  final String title, subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _PrefRow({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  static const _bgColor = Color(0xFF0F1117);
+  static const _textColor = Color(0xFFE8EAED);
+  static const _subtextColor = Color(0xFF9AA0A6);
+  static const _accentColor = Color(0xFF4F8EF7);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _bgColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: const TextStyle(
+                      color: _textColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14)),
+              const SizedBox(height: 4),
+              Text(subtitle,
+                  style: const TextStyle(color: _subtextColor, fontSize: 12)),
+            ],
+          ),
+          Switch(value: value, onChanged: onChanged, activeThumbColor: _accentColor),
+        ],
       ),
     );
   }
@@ -641,11 +448,8 @@ class _SettingsRow extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _SettingsRow({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
+  const _SettingsRow(
+      {required this.icon, required this.label, required this.onTap});
 
   static const _cardColor = Color(0xFF1A1D2E);
   static const _accentColor = Color(0xFF4F8EF7);
@@ -667,11 +471,8 @@ class _SettingsRow extends StatelessWidget {
             Icon(icon, color: _accentColor, size: 20),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(color: _textColor, fontSize: 14),
-              ),
-            ),
+                child: Text(label,
+                    style: const TextStyle(color: _textColor, fontSize: 14))),
             const Icon(Icons.chevron_right_rounded,
                 color: Color(0xFF9AA0A6), size: 20),
           ],
