@@ -263,6 +263,129 @@ class HomeDashboard extends StatelessWidget {
             ),
             const SizedBox(height: 28),
 
+            // Upcoming group sessions — only renders when the user has at
+            // least one group with a future nextSession date.
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('groups')
+                  .snapshots(),
+              builder: (context, groupSnap) {
+                if (!groupSnap.hasData) return const SizedBox.shrink();
+
+                final now = DateTime.now();
+                final upcoming = groupSnap.data!.docs
+                    .map((d) => d.data() as Map<String, dynamic>)
+                    .where((d) {
+                      final members = d['members'] as List?;
+                      if (members == null ||
+                          !members.contains(user?.uid)) {
+                        return false;
+                      }
+                      final ts = d['nextSession'] as Timestamp?;
+                      if (ts == null) { return false; }
+                      return ts.toDate().isAfter(now);
+                    })
+                    .toList()
+                  ..sort((a, b) {
+                    final aTs = (a['nextSession'] as Timestamp).toDate();
+                    final bTs = (b['nextSession'] as Timestamp).toDate();
+                    return aTs.compareTo(bTs);
+                  });
+
+                if (upcoming.isEmpty) return const SizedBox.shrink();
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Upcoming Sessions',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _textColor)),
+                    const SizedBox(height: 12),
+                    ...upcoming.take(3).map((g) {
+                      final session =
+                          (g['nextSession'] as Timestamp).toDate();
+                      final daysUntil =
+                          session.difference(now).inDays;
+                      final label = daysUntil == 0
+                          ? 'Today'
+                          : daysUntil == 1
+                              ? 'Tomorrow'
+                              : '${session.day}/${session.month}/${session.year}';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: GestureDetector(
+                          onTap: () => onSwitchTab(3),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: _cardColor,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                  color:
+                                      _accentColor.withValues(alpha: 0.25)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        _accentColor.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                      Icons.groups_rounded,
+                                      color: _accentColor,
+                                      size: 20),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(g['name'] ?? '',
+                                          style: const TextStyle(
+                                              color: _textColor,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14)),
+                                      const SizedBox(height: 2),
+                                      Text(g['courseTag'] ?? '',
+                                          style: const TextStyle(
+                                              color: _subtextColor,
+                                              fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        _accentColor.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(label,
+                                      style: const TextStyle(
+                                          color: _accentColor,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 18),
+                  ],
+                );
+              },
+            ),
+
             const Text("Today's Priorities",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _textColor)),
             const SizedBox(height: 16),
