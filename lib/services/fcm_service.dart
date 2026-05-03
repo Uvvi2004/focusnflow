@@ -6,20 +6,16 @@ class FCMService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
   Future<void> initialize() async {
-    // Request permission
     await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    // Save FCM token to Firestore
     await _saveToken();
 
-    // Listen for token refresh
     _messaging.onTokenRefresh.listen(_updateToken);
 
-    // Handle foreground messages
     FirebaseMessaging.onMessage.listen((message) {
       print('Foreground message: ${message.notification?.title}');
     });
@@ -44,6 +40,36 @@ class FCMService {
           .doc(uid)
           .set({'fcmToken': token}, SetOptions(merge: true));
     }
+  }
+
+  // Called when a task is added and is High priority
+  Future<void> sendHighPriorityAlert({
+    required String taskTitle,
+    required String courseName,
+    required String userId,
+  }) async {
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'title': '🔴 High Priority Task',
+      'body': '$courseName — $taskTitle needs your attention now!',
+      'recipients': [userId],
+      'createdAt': Timestamp.now(),
+      'type': 'deadline',
+    });
+  }
+
+  // Called when a task is due within 24 hours
+  Future<void> send24HourReminder({
+    required String taskTitle,
+    required String courseName,
+    required String userId,
+  }) async {
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'title': '⏰ Due in 24 Hours',
+      'body': '$courseName — $taskTitle is due tomorrow!',
+      'recipients': [userId],
+      'createdAt': Timestamp.now(),
+      'type': 'deadline',
+    });
   }
 
   Future<void> sendGroupNotification({
