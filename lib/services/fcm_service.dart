@@ -92,4 +92,36 @@ class FCMService {
       'type': 'group',
     });
   }
+
+  // Sent immediately when a creator sets a next session date.
+  Future<void> sendGroupSessionScheduled({
+    required String groupName,
+    required DateTime sessionDate,
+    required List<String> memberUids,
+  }) async {
+    final d = sessionDate;
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'title': 'Session Scheduled — $groupName',
+      'body': 'Next session set for ${d.day}/${d.month}/${d.year}. Mark your calendar!',
+      'recipients': memberUids,
+      'createdAt': Timestamp.now(),
+      'type': 'group',
+    });
+  }
+
+  // Sent when the session is within 25 hours so members get a same-day heads-up.
+  Future<void> sendGroupSession24HourReminder({
+    required String groupName,
+    required DateTime sessionDate,
+    required List<String> memberUids,
+  }) async {
+    final d = sessionDate;
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'title': 'Session Tomorrow — $groupName',
+      'body': 'Your group session is tomorrow (${d.day}/${d.month}/${d.year}). Don\'t miss it!',
+      'recipients': memberUids,
+      'createdAt': Timestamp.now(),
+      'type': 'group',
+    });
+  }
 }
