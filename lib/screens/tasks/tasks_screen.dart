@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/task_model.dart';
 import '../../services/firestore_service.dart';
+import '../../services/fcm_service.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -12,6 +13,7 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> {
   final _firestoreService = FirestoreService();
+  final _fcmService = FCMService();
   final _user = FirebaseAuth.instance.currentUser;
 
   static const _bgColor = Color(0xFF0F1117);
@@ -19,6 +21,17 @@ class _TasksScreenState extends State<TasksScreen> {
   static const _accentColor = Color(0xFF4F8EF7);
   static const _textColor = Color(0xFFE8EAED);
   static const _subtextColor = Color(0xFF9AA0A6);
+
+  Color _priorityColor(TaskModel task) {
+    final label = TaskModel.getPriorityLabel(task.deadline, task.courseWeight);
+    if (label == 'High') return Colors.redAccent;
+    if (label == 'Med') return Colors.orangeAccent;
+    return Colors.greenAccent;
+  }
+
+  String _priorityLabel(TaskModel task) {
+    return TaskModel.getPriorityLabel(task.deadline, task.courseWeight);
+  }
 
   void _showAddTaskSheet() {
     final courseController = TextEditingController();
@@ -83,7 +96,8 @@ class _TasksScreenState extends State<TasksScreen> {
                     context: context,
                     initialDate: selectedDate,
                     firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                    lastDate:
+                        DateTime.now().add(const Duration(days: 365)),
                     builder: (context, child) => Theme(
                       data: ThemeData.dark(),
                       child: child!,
@@ -121,8 +135,10 @@ class _TasksScreenState extends State<TasksScreen> {
                       hoursController.text.isEmpty ||
                       weightController.text.isEmpty) return;
 
-                  final hours = double.tryParse(hoursController.text) ?? 1;
-                  final weight = double.tryParse(weightController.text) ?? 10;
+                  final hours =
+                      double.tryParse(hoursController.text) ?? 1;
+                  final weight =
+                      double.tryParse(weightController.text) ?? 10;
                   final score = TaskModel.calculatePriority(
                       selectedDate, hours, weight);
 
@@ -140,6 +156,32 @@ class _TasksScreenState extends State<TasksScreen> {
                   );
 
                   await _firestoreService.addTask(task);
+
+                  // Check priority and send notifications
+                  final label = TaskModel.getPriorityLabel(
+                      selectedDate, weight);
+                  final daysLeft = selectedDate
+                      .difference(DateTime.now())
+                      .inDays;
+
+                  // Notify if High priority
+                  if (label == 'High') {
+                    await _fcmService.sendHighPriorityAlert(
+                      taskTitle: titleController.text.trim(),
+                      courseName: courseController.text.trim(),
+                      userId: _user.uid,
+                    );
+                  }
+
+                  // Notify if due within 24 hours
+                  if (daysLeft <= 1) {
+                    await _fcmService.send24HourReminder(
+                      taskTitle: titleController.text.trim(),
+                      courseName: courseController.text.trim(),
+                      userId: _user.uid,
+                    );
+                  }
+
                   if (mounted) Navigator.pop(context);
                 },
                 style: ElevatedButton.styleFrom(
@@ -163,18 +205,6 @@ class _TasksScreenState extends State<TasksScreen> {
         ),
       ),
     );
-  }
-
-  Color _priorityColor(double score) {
-    if (score >= 70) return Colors.redAccent;
-    if (score >= 40) return Colors.orangeAccent;
-    return Colors.greenAccent;
-  }
-
-  String _priorityLabel(double score) {
-    if (score >= 70) return 'High';
-    if (score >= 40) return 'Med';
-    return 'Low';
   }
 
   @override
@@ -204,18 +234,21 @@ class _TasksScreenState extends State<TasksScreen> {
                       SizedBox(height: 4),
                       Text(
                         'Sorted by priority score',
-                        style: TextStyle(color: _subtextColor, fontSize: 13),
+                        style:
+                            TextStyle(color: _subtextColor, fontSize: 13),
                       ),
                     ],
                   ),
-                  // Legend
                   Row(
                     children: [
-                      _LegendDot(color: Colors.redAccent, label: 'High'),
+                      _LegendDot(
+                          color: Colors.redAccent, label: 'High'),
                       const SizedBox(width: 8),
-                      _LegendDot(color: Colors.orangeAccent, label: 'Med'),
+                      _LegendDot(
+                          color: Colors.orangeAccent, label: 'Med'),
                       const SizedBox(width: 8),
-                      _LegendDot(color: Colors.greenAccent, label: 'Low'),
+                      _LegendDot(
+                          color: Colors.greenAccent, label: 'Low'),
                     ],
                   ),
                 ],
@@ -225,8 +258,10 @@ class _TasksScreenState extends State<TasksScreen> {
               child: StreamBuilder<List<TaskModel>>(
                 stream: _firestoreService.getTasks(_user!.uid),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                  if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(
+                        child: CircularProgressIndicator());
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return Center(
@@ -253,13 +288,15 @@ class _TasksScreenState extends State<TasksScreen> {
 
                   final tasks = snapshot.data!;
                   return ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 24),
                     itemCount: tasks.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final task = tasks[index];
-                      final color = _priorityColor(task.priorityScore);
-                      final label = _priorityLabel(task.priorityScore);
+                      final color = _priorityColor(task);
+                      final label = _priorityLabel(task);
                       final daysLeft = task.deadline
                           .difference(DateTime.now())
                           .inDays;
@@ -274,7 +311,8 @@ class _TasksScreenState extends State<TasksScreen> {
                             color: Colors.redAccent.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: const Icon(Icons.delete_outline_rounded,
+                          child: const Icon(
+                              Icons.delete_outline_rounded,
                               color: Colors.redAccent),
                         ),
                         onDismissed: (_) =>
@@ -284,7 +322,8 @@ class _TasksScreenState extends State<TasksScreen> {
                           decoration: BoxDecoration(
                             color: _cardColor,
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Colors.white10),
+                            border:
+                                Border.all(color: Colors.white10),
                           ),
                           child: Row(
                             children: [
@@ -297,10 +336,12 @@ class _TasksScreenState extends State<TasksScreen> {
                                   height: 24,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: color, width: 2),
+                                    border: Border.all(
+                                        color: color, width: 2),
                                   ),
                                   child: const Icon(Icons.check,
-                                      size: 14, color: Colors.transparent),
+                                      size: 14,
+                                      color: Colors.transparent),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -318,30 +359,31 @@ class _TasksScreenState extends State<TasksScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Text(
-                                          '$daysLeft days left  •  ${task.estimatedHours}h  •  ${task.courseWeight}% weight',
-                                          style: const TextStyle(
-                                            color: _subtextColor,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
+                                    Text(
+                                      '$daysLeft days left  •  ${task.estimatedHours}h  •  ${task.courseWeight}% weight',
+                                      style: const TextStyle(
+                                        color: _subtextColor,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.end,
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
+                                    padding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: color.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(8),
+                                      color:
+                                          color.withOpacity(0.15),
+                                      borderRadius:
+                                          BorderRadius.circular(8),
                                     ),
                                     child: Text(
                                       label,
@@ -410,8 +452,8 @@ class _SheetTextField extends StatelessWidget {
           labelText: label,
           labelStyle: const TextStyle(color: Color(0xFF9AA0A6)),
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16, vertical: 14),
         ),
       ),
     );
@@ -431,11 +473,13 @@ class _LegendDot extends StatelessWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          decoration:
+              BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
         Text(label,
-            style: const TextStyle(color: Color(0xFF9AA0A6), fontSize: 11)),
+            style: const TextStyle(
+                color: Color(0xFF9AA0A6), fontSize: 11)),
       ],
     );
   }
