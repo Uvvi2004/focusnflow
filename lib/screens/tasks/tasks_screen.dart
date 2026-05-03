@@ -6,6 +6,222 @@ import '../../services/firestore_service.dart';
 import '../../services/fcm_service.dart';
 import '../schedule/schedule_screen.dart';
 
+// ── Add Task Sheet ──────────────────────────────────────────────────────────
+// A proper StatefulWidget instead of StatefulBuilder so Flutter can manage
+// its lifecycle correctly. StatefulBuilder inside showModalBottomSheet causes
+// a _dependents.isEmpty assertion when the Firestore stream emits during the
+// sheet dismiss animation and MediaQuery dependents are still registered.
+class _AddTaskSheet extends StatefulWidget {
+  final String userId;
+  final FirestoreService firestoreService;
+  final FCMService fcmService;
+
+  const _AddTaskSheet({
+    required this.userId,
+    required this.firestoreService,
+    required this.fcmService,
+  });
+
+  @override
+  State<_AddTaskSheet> createState() => _AddTaskSheetState();
+}
+
+class _AddTaskSheetState extends State<_AddTaskSheet> {
+  final _courseController = TextEditingController();
+  final _titleController = TextEditingController();
+  final _hoursController = TextEditingController();
+  final _weightController = TextEditingController();
+  DateTime _deadline = DateTime.now().add(const Duration(days: 7));
+
+  static const _bgColor = Color(0xFF0F1117);
+  static const _accentColor = Color(0xFF4F8EF7);
+  static const _textColor = Color(0xFFE8EAED);
+
+  @override
+  void dispose() {
+    _courseController.dispose();
+    _titleController.dispose();
+    _hoursController.dispose();
+    _weightController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final course = _courseController.text.trim();
+    final title = _titleController.text.trim();
+    if (course.isEmpty || title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Course name and title are required')));
+      return;
+    }
+    final hours = double.tryParse(_hoursController.text);
+    if (hours == null || hours <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Estimated hours must be a positive number')));
+      return;
+    }
+    final weight = double.tryParse(_weightController.text);
+    if (weight == null || weight < 0 || weight > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Course weight must be between 0 and 100')));
+      return;
+    }
+
+    final task = TaskModel(
+      taskId: '',
+      userId: widget.userId,
+      courseName: course,
+      title: title,
+      deadline: _deadline,
+      estimatedHours: hours,
+      courseWeight: weight,
+      priorityScore: TaskModel.calculatePriority(_deadline, hours, weight),
+      completed: false,
+      createdAt: DateTime.now(),
+    );
+
+    await widget.firestoreService.addTask(task);
+
+    // Close the sheet before any further async work so the sheet's context
+    // is fully deactivated before the Firestore stream triggers a rebuild.
+    if (mounted) Navigator.pop(context);
+
+    // Notifications run after the sheet is gone — best-effort.
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users').doc(widget.userId).get();
+    final notifsOn =
+        (userDoc.data()?['notificationsEnabled'] ?? true) as bool;
+
+    if (notifsOn) {
+      final label = TaskModel.getPriorityLabel(_deadline, weight);
+      final daysLeft = _deadline.difference(DateTime.now()).inDays;
+      if (label == 'High') {
+        await widget.fcmService.sendHighPriorityAlert(
+            taskTitle: title, courseName: course, userId: widget.userId);
+      }
+      if (daysLeft <= 1) {
+        await widget.fcmService.send24HourReminder(
+            taskTitle: title, courseName: course, userId: widget.userId);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24, right: 24, top: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Add New Task',
+              style: TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.bold, color: _textColor)),
+          const SizedBox(height: 20),
+          _Field(controller: _courseController, label: 'Course Name (e.g. CS450)'),
+          const SizedBox(height: 12),
+          _Field(controller: _titleController, label: 'Task Title (e.g. Assignment 2)'),
+          const SizedBox(height: 12),
+          _Field(controller: _hoursController, label: 'Estimated Hours (e.g. 3)',
+              keyboardType: TextInputType.number),
+          const SizedBox(height: 12),
+          _Field(controller: _weightController, label: 'Course Weight % (e.g. 20)',
+              keyboardType: TextInputType.number),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _deadline,
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+                builder: (ctx, child) =>
+                    Theme(data: ThemeData.dark(), child: child!),
+              );
+              if (picked != null && mounted) {
+                setState(() => _deadline = picked);
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _bgColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded,
+                      color: _accentColor, size: 18),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Deadline: ${_deadline.day}/${_deadline.month}/${_deadline.year}',
+                    style: const TextStyle(color: _textColor),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: _submit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accentColor,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Add Task',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Simple text field used inside _AddTaskSheet.
+class _Field extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final TextInputType keyboardType;
+
+  const _Field({
+    required this.controller,
+    required this.label,
+    this.keyboardType = TextInputType.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F1117),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Color(0xFFE8EAED)),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Color(0xFF9AA0A6)),
+          border: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+      ),
+    );
+  }
+}
+
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
 
@@ -35,12 +251,6 @@ class _TasksScreenState extends State<TasksScreen> {
       TaskModel.getPriorityLabel(task.deadline, task.courseWeight);
 
   void _showAddTaskSheet() {
-    final courseController = TextEditingController();
-    final titleController = TextEditingController();
-    final hoursController = TextEditingController();
-    final weightController = TextEditingController();
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 7));
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -48,171 +258,12 @@ class _TasksScreenState extends State<TasksScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            left: 24, right: 24, top: 24,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Add New Task',
-                  style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold, color: _textColor)),
-              const SizedBox(height: 20),
-              _SheetTextField(controller: courseController,
-                  label: 'Course Name (e.g. CS450)'),
-              const SizedBox(height: 12),
-              _SheetTextField(controller: titleController,
-                  label: 'Task Title (e.g. Assignment 2)'),
-              const SizedBox(height: 12),
-              _SheetTextField(controller: hoursController,
-                  label: 'Estimated Hours (e.g. 3)',
-                  keyboardType: TextInputType.number),
-              const SizedBox(height: 12),
-              _SheetTextField(controller: weightController,
-                  label: 'Course Weight % (e.g. 20)',
-                  keyboardType: TextInputType.number),
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: selectedDate,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                    builder: (ctx, child) =>
-                        Theme(data: ThemeData.dark(), child: child!),
-                  );
-                  if (picked != null) setSheetState(() => selectedDate = picked);
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: _bgColor,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.calendar_today_rounded,
-                          color: _accentColor, size: 18),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Deadline: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                        style: const TextStyle(color: _textColor),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => _submitTask(
-                  ctx: ctx,
-                  courseController: courseController,
-                  titleController: titleController,
-                  hoursController: hoursController,
-                  weightController: weightController,
-                  selectedDate: selectedDate,
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accentColor,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Add Task',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white)),
-              ),
-            ],
-          ),
-        ),
+      builder: (_) => _AddTaskSheet(
+        userId: _user!.uid,
+        firestoreService: _firestoreService,
+        fcmService: _fcmService,
       ),
-    ).whenComplete(() {
-      // Dispose sheet controllers when the sheet closes.
-      courseController.dispose();
-      titleController.dispose();
-      hoursController.dispose();
-      weightController.dispose();
-    });
-  }
-
-  Future<void> _submitTask({
-    required BuildContext ctx,
-    required TextEditingController courseController,
-    required TextEditingController titleController,
-    required TextEditingController hoursController,
-    required TextEditingController weightController,
-    required DateTime selectedDate,
-  }) async {
-    final course = courseController.text.trim();
-    final title = titleController.text.trim();
-    if (course.isEmpty || title.isEmpty) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('Course name and title are required')));
-      return;
-    }
-
-    final hours = double.tryParse(hoursController.text);
-    if (hours == null || hours <= 0) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('Estimated hours must be a positive number')));
-      return;
-    }
-
-    final weight = double.tryParse(weightController.text);
-    if (weight == null || weight < 0 || weight > 100) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('Course weight must be between 0 and 100')));
-      return;
-    }
-
-    final score = TaskModel.calculatePriority(selectedDate, hours, weight);
-    final task = TaskModel(
-      taskId: '',
-      userId: _user!.uid,
-      courseName: course,
-      title: title,
-      deadline: selectedDate,
-      estimatedHours: hours,
-      courseWeight: weight,
-      priorityScore: score,
-      completed: false,
-      createdAt: DateTime.now(),
     );
-
-    await _firestoreService.addTask(task);
-
-    // Read the user's notification preference before writing any alerts so
-    // the toggle in Profile > Notification Preferences is actually respected.
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_user.uid)
-        .get();
-    final notifsOn =
-        (userDoc.data()?['notificationsEnabled'] ?? true) as bool;
-
-    if (notifsOn) {
-      final label = TaskModel.getPriorityLabel(selectedDate, weight);
-      final daysLeft = selectedDate.difference(DateTime.now()).inDays;
-
-      if (label == 'High') {
-        await _fcmService.sendHighPriorityAlert(
-            taskTitle: title, courseName: course, userId: _user.uid);
-      }
-      if (daysLeft <= 1) {
-        await _fcmService.send24HourReminder(
-            taskTitle: title, courseName: course, userId: _user.uid);
-      }
-    }
-
-    if (ctx.mounted) Navigator.pop(ctx);
   }
 
   @override
@@ -407,41 +458,6 @@ class _TasksScreenState extends State<TasksScreen> {
         onPressed: _showAddTaskSheet,
         backgroundColor: _accentColor,
         child: const Icon(Icons.add_rounded, color: Colors.white),
-      ),
-    );
-  }
-}
-
-class _SheetTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final TextInputType keyboardType;
-
-  const _SheetTextField({
-    required this.controller,
-    required this.label,
-    this.keyboardType = TextInputType.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F1117),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: const TextStyle(color: Color(0xFFE8EAED)),
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: const TextStyle(color: Color(0xFF9AA0A6)),
-          border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
       ),
     );
   }
