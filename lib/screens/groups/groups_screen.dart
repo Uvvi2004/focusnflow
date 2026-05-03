@@ -13,7 +13,8 @@ class GroupsScreen extends StatefulWidget {
 
 class _GroupsScreenState extends State<GroupsScreen> {
   final _firestoreService = FirestoreService();
-  final _user = FirebaseAuth.instance.currentUser;
+  // GroupsScreen is only reachable when auth is confirmed — bang is safe.
+  final _user = FirebaseAuth.instance.currentUser!;
 
   static const _bgColor = Color(0xFF0F1117);
   static const _cardColor = Color(0xFF1A1D2E);
@@ -70,22 +71,23 @@ class _GroupsScreenState extends State<GroupsScreen> {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isEmpty ||
-                    courseController.text.isEmpty) return;
+                if (nameController.text.isEmpty || courseController.text.isEmpty) {
+                  return;
+                }
 
                 final group = GroupModel(
                   groupId: '',
                   name: nameController.text.trim(),
                   courseTag: courseController.text.trim(),
                   description: descController.text.trim(),
-                  members: [_user!.uid],
+                  members: [_user.uid],
                   coverImageUrl: '',
                   createdBy: _user.uid,
                   createdAt: DateTime.now(),
                 );
 
                 await _firestoreService.createGroup(group);
-                if (mounted) Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accentColor,
@@ -110,7 +112,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 
   void _showGroupDetail(GroupModel group) {
-    final isCreator = group.createdBy == _user!.uid;
+    final isCreator = group.createdBy == _user.uid;
     final isMember = group.members.contains(_user.uid);
 
     showModalBottomSheet(
@@ -143,7 +145,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: _accentColor.withOpacity(0.15),
+                    color: _accentColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -195,9 +197,17 @@ class _GroupsScreenState extends State<GroupsScreen> {
             if (!isMember)
               ElevatedButton(
                 onPressed: () async {
-                  await _firestoreService.joinGroup(
-                      group.groupId, _user.uid);
-                  if (mounted) Navigator.pop(context);
+                  try {
+                    await _firestoreService.joinGroup(
+                        group.groupId, _user.uid);
+                    if (context.mounted) Navigator.pop(context);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Could not join group: $e')),
+                      );
+                    }
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _accentColor,
@@ -212,19 +222,27 @@ class _GroupsScreenState extends State<GroupsScreen> {
             if (isMember && !isCreator)
               ElevatedButton(
                 onPressed: () async {
-                  await _firestoreService.leaveGroup(
-                      group.groupId, _user.uid);
-                  if (mounted) Navigator.pop(context);
+                  try {
+                    await _firestoreService.leaveGroup(
+                        group.groupId, _user.uid);
+                    if (context.mounted) Navigator.pop(context);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Could not leave group: $e')),
+                      );
+                    }
+                  }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent.withOpacity(0.15),
+                  backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
                   foregroundColor: Colors.redAccent,
                   minimumSize: const Size(double.infinity, 48),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
-                        color: Colors.redAccent.withOpacity(0.3)),
+                        color: Colors.redAccent.withValues(alpha: 0.3)),
                   ),
                 ),
                 child: const Text('Leave Group'),
@@ -247,7 +265,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   if (picked != null) {
                     await _firestoreService.updateNextSession(
                         group.groupId, picked);
-                    if (mounted) Navigator.pop(context);
+                    if (context.mounted) Navigator.pop(context);
                   }
                 },
                 style: ElevatedButton.styleFrom(
@@ -259,6 +277,59 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 ),
                 child: const Text('Set Next Session',
                     style: TextStyle(color: Colors.white)),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: () async {
+                  // Confirm before deleting — this removes the group for all members.
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: const Color(0xFF1A1D2E),
+                      title: const Text('Delete Group',
+                          style: TextStyle(color: Color(0xFFE8EAED))),
+                      content: Text(
+                        'Delete "${group.name}"? This removes the group for all ${group.members.length} member(s) and cannot be undone.',
+                        style: const TextStyle(color: Color(0xFF9AA0A6)),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Delete',
+                              style: TextStyle(color: Colors.redAccent)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    try {
+                      await _firestoreService.deleteGroup(group.groupId);
+                      if (context.mounted) Navigator.pop(context);
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Could not delete group: $e')),
+                        );
+                      }
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
+                  foregroundColor: Colors.redAccent,
+                  minimumSize: const Size(double.infinity, 48),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                        color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                ),
+                child: const Text('Delete Group'),
               ),
             ],
             if (isMember) ...[
@@ -356,10 +427,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
                   final groups = snapshot.data!;
                   final myGroups = groups
-                      .where((g) => g.members.contains(_user!.uid))
+                      .where((g) => g.members.contains(_user.uid))
                       .toList();
                   final otherGroups = groups
-                      .where((g) => !g.members.contains(_user!.uid))
+                      .where((g) => !g.members.contains(_user.uid))
                       .toList();
 
                   return ListView(
@@ -379,7 +450,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               padding: const EdgeInsets.only(bottom: 10),
                               child: _GroupCard(
                                 group: g,
-                                userId: _user!.uid,
+                                userId: _user.uid,
                                 onTap: () => _showGroupDetail(g),
                               ),
                             )),
@@ -399,7 +470,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               padding: const EdgeInsets.only(bottom: 10),
                               child: _GroupCard(
                                 group: g,
-                                userId: _user!.uid,
+                                userId: _user.uid,
                                 onTap: () => _showGroupDetail(g),
                               ),
                             )),
@@ -450,7 +521,7 @@ class _GroupCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isMember
-                ? _accentColor.withOpacity(0.3)
+                ? _accentColor.withValues(alpha: 0.3)
                 : Colors.white10,
           ),
         ),
@@ -460,7 +531,7 @@ class _GroupCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: _accentColor.withOpacity(0.1),
+                color: _accentColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(Icons.group_rounded,
@@ -495,7 +566,7 @@ class _GroupCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _accentColor.withOpacity(0.15),
+                  color: _accentColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Text(
@@ -517,12 +588,10 @@ class _GroupCard extends StatelessWidget {
 class _SheetTextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
-  final TextInputType keyboardType;
 
   const _SheetTextField({
     required this.controller,
     required this.label,
-    this.keyboardType = TextInputType.text,
   });
 
   @override
@@ -535,7 +604,6 @@ class _SheetTextField extends StatelessWidget {
       ),
       child: TextField(
         controller: controller,
-        keyboardType: keyboardType,
         style: const TextStyle(color: Color(0xFFE8EAED)),
         decoration: InputDecoration(
           labelText: label,
