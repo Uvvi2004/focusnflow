@@ -186,7 +186,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.15),
+                    color: statusColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -236,12 +236,12 @@ class _RoomsScreenState extends State<RoomsScreen> {
                         if (mounted) Navigator.pop(context);
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: color.withOpacity(0.15),
+                        backgroundColor: color.withValues(alpha: 0.15),
                         foregroundColor: color,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
-                          side: BorderSide(color: color.withOpacity(0.3)),
+                          side: BorderSide(color: color.withValues(alpha: 0.3)),
                         ),
                       ),
                       child: Text(
@@ -371,7 +371,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                                 width: 44,
                                 height: 44,
                                 decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.1),
+                                  color: statusColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(statusIcon,
@@ -405,7 +405,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.15),
+                                  color: statusColor.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
