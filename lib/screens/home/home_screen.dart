@@ -16,23 +16,27 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [
-    const HomeDashboard(),
-    const TasksScreen(),
-    const RoomsScreen(),
-    const GroupsScreen(),
-    const ProfileScreen(),
-  ];
-
   static const _cardColor = Color(0xFF1A1D2E);
   static const _accentColor = Color(0xFF4F8EF7);
   static const _subtextColor = Color(0xFF9AA0A6);
 
+  void _switchTab(int index) {
+    setState(() => _currentIndex = index);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screens = [
+      HomeDashboard(onSwitchTab: _switchTab),
+      const TasksScreen(),
+      const RoomsScreen(),
+      const GroupsScreen(),
+      const ProfileScreen(),
+    ];
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F1117),
-      body: _screens[_currentIndex],
+      body: screens[_currentIndex],
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: _cardColor,
@@ -40,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
+          onTap: _switchTab,
           backgroundColor: _cardColor,
           selectedItemColor: _accentColor,
           unselectedItemColor: _subtextColor,
@@ -75,7 +79,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class HomeDashboard extends StatelessWidget {
-  const HomeDashboard({super.key});
+  final Function(int) onSwitchTab;
+
+  const HomeDashboard({super.key, required this.onSwitchTab});
 
   static const _bgColor = Color(0xFF0F1117);
   static const _cardColor = Color(0xFF1A1D2E);
@@ -168,6 +174,7 @@ class HomeDashboard extends StatelessWidget {
                               value: taskCount.toString(),
                               icon: Icons.task_alt_rounded,
                               color: Colors.orangeAccent,
+                              onTap: () => onSwitchTab(1),
                             ),
                             const SizedBox(width: 12),
                             _StatCard(
@@ -175,6 +182,7 @@ class HomeDashboard extends StatelessWidget {
                               value: roomCount.toString(),
                               icon: Icons.meeting_room_rounded,
                               color: Colors.greenAccent,
+                              onTap: () => onSwitchTab(2),
                             ),
                             const SizedBox(width: 12),
                             _StatCard(
@@ -182,6 +190,7 @@ class HomeDashboard extends StatelessWidget {
                               value: groupCount.toString(),
                               icon: Icons.group_rounded,
                               color: _accentColor,
+                              onTap: () => onSwitchTab(3),
                             ),
                           ],
                         );
@@ -193,7 +202,7 @@ class HomeDashboard extends StatelessWidget {
             ),
             const SizedBox(height: 28),
 
-            // Today's priorities from Firestore
+            // Today's priorities
             const Text(
               "Today's Priorities",
               style: TextStyle(
@@ -228,14 +237,11 @@ class HomeDashboard extends StatelessWidget {
                 }
 
                 final docs = snapshot.data!.docs;
-                final tasks = docs.map((d) {
-                  final data = d.data() as Map<String, dynamic>;
-                  return data;
-                }).toList();
-
+                final tasks = docs
+                    .map((d) => d.data() as Map<String, dynamic>)
+                    .toList();
                 tasks.sort((a, b) => (b['priorityScore'] as num)
                     .compareTo(a['priorityScore'] as num));
-
                 final top = tasks.take(3).toList();
 
                 return Column(
@@ -260,12 +266,15 @@ class HomeDashboard extends StatelessWidget {
                     }
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: _PriorityTaskCard(
-                        course: task['courseName'] ?? '',
-                        title: task['title'] ?? '',
-                        dueDate: '$daysLeft days left',
-                        priority: priorityLabel,
-                        priorityColor: priorityColor,
+                      child: GestureDetector(
+                        onTap: () => onSwitchTab(1),
+                        child: _PriorityTaskCard(
+                          course: task['courseName'] ?? '',
+                          title: task['title'] ?? '',
+                          dueDate: '$daysLeft days left',
+                          priority: priorityLabel,
+                          priorityColor: priorityColor,
+                        ),
                       ),
                     );
                   }).toList(),
@@ -289,19 +298,19 @@ class HomeDashboard extends StatelessWidget {
                 _QuickAction(
                   icon: Icons.add_task_rounded,
                   label: 'Add Task',
-                  onTap: () {},
+                  onTap: () => onSwitchTab(1),
                 ),
                 const SizedBox(width: 12),
                 _QuickAction(
                   icon: Icons.meeting_room_rounded,
                   label: 'Find Room',
-                  onTap: () {},
+                  onTap: () => onSwitchTab(2),
                 ),
                 const SizedBox(width: 12),
                 _QuickAction(
                   icon: Icons.group_add_rounded,
                   label: 'My Groups',
-                  onTap: () {},
+                  onTap: () => onSwitchTab(3),
                 ),
               ],
             ),
@@ -342,12 +351,14 @@ class _StatCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback onTap;
 
   const _StatCard({
     required this.label,
     required this.value,
     required this.icon,
     required this.color,
+    required this.onTap,
   });
 
   static const _cardColor = Color(0xFF1A1D2E);
@@ -356,28 +367,31 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 8),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: color)),
-            const SizedBox(height: 2),
-            Text(label,
-                style:
-                    const TextStyle(fontSize: 11, color: _subtextColor)),
-          ],
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(height: 8),
+              Text(value,
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: color)),
+              const SizedBox(height: 2),
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 11, color: _subtextColor)),
+            ],
+          ),
         ),
       ),
     );
