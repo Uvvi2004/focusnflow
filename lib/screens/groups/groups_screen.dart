@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/group_model.dart';
 import '../../services/firestore_service.dart';
+import 'pomodoro_screen.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key});
@@ -170,7 +171,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 const SizedBox(width: 8),
                 Text(
                   '${group.members.length} member${group.members.length == 1 ? '' : 's'}',
-                  style: const TextStyle(color: _subtextColor, fontSize: 14),
+                  style:
+                      const TextStyle(color: _subtextColor, fontSize: 14),
                 ),
               ],
             ),
@@ -183,8 +185,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   const SizedBox(width: 8),
                   Text(
                     'Next session: ${group.nextSession!.day}/${group.nextSession!.month}/${group.nextSession!.year}',
-                    style:
-                        const TextStyle(color: _subtextColor, fontSize: 14),
+                    style: const TextStyle(
+                        color: _subtextColor, fontSize: 14),
                   ),
                 ],
               ),
@@ -227,7 +229,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 ),
                 child: const Text('Leave Group'),
               ),
-            if (isCreator)
+            if (isCreator) ...[
               ElevatedButton(
                 onPressed: () async {
                   final picked = await showDatePicker(
@@ -258,6 +260,34 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 child: const Text('Set Next Session',
                     style: TextStyle(color: Colors.white)),
               ),
+            ],
+            if (isMember) ...[
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PomodoroScreen(
+                        groupId: group.groupId,
+                        groupName: group.name,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.timer_rounded, color: Colors.white),
+                label: const Text('Start Pomodoro Timer',
+                    style: TextStyle(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.greenAccent.shade700,
+                  minimumSize: const Size(double.infinity, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -462,8 +492,8 @@ class _GroupCard extends StatelessWidget {
             ),
             if (isMember)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: _accentColor.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
