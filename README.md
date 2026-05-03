@@ -53,14 +53,6 @@ Run the available widget and model tests with:
 ```bash
 flutter test
 ```
-
-## Notes For Presentation
-
-- Explain how each feature maps to a Firebase service.
-- Show the live notification flow from task creation to bell display.
-- Point out the Firestore rules and indexes that support the app.
-- Mention how the app stays organized through models, services, and screen folders.
-
 ## Build
 
 To create a debug APK:
