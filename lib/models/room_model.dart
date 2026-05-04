@@ -1,14 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Represents a campus study room stored under rooms/{roomId} in Firestore.
+// Room status is updated in real time — any student can flip open/occupied/reserved.
 class RoomModel {
   final String roomId;
   final String name;
   final String building;
   final String floor;
   final int capacity;
-  final String status; // open / occupied / reserved
-  final List<String> amenities;
-  final DateTime updatedAt;
+  final String status;          // 'open' | 'occupied' | 'reserved'
+  final List<String> amenities; // e.g. ['WiFi', 'Whiteboard', 'Projector']
+  final DateTime updatedAt;     // tracks when the status was last changed
 
   RoomModel({
     required this.roomId,

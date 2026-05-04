@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../models/room_model.dart';
 import '../../services/firestore_service.dart';
 
+// Study Rooms screen — shows live availability of campus rooms.
+// Any student can update the status (open / occupied / reserved) in real time.
+// Rooms are seeded from FirestoreService on first launch.
 class RoomsScreen extends StatefulWidget {
   const RoomsScreen({super.key});
 
@@ -24,35 +27,29 @@ class _RoomsScreenState extends State<RoomsScreen> {
   @override
   void initState() {
     super.initState();
+    // seedRooms checks if the collection is empty before writing, so it's safe every launch
     _firestoreService.seedRooms();
   }
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'open':
-        return Colors.greenAccent;
-      case 'occupied':
-        return Colors.orangeAccent;
-      case 'reserved':
-        return Colors.redAccent;
-      default:
-        return Colors.grey;
+      case 'open': return Colors.greenAccent;
+      case 'occupied': return Colors.orangeAccent;
+      case 'reserved': return Colors.redAccent;
+      default: return Colors.grey;
     }
   }
 
   IconData _statusIcon(String status) {
     switch (status) {
-      case 'open':
-        return Icons.check_circle_rounded;
-      case 'occupied':
-        return Icons.people_rounded;
-      case 'reserved':
-        return Icons.lock_rounded;
-      default:
-        return Icons.circle;
+      case 'open': return Icons.check_circle_rounded;
+      case 'occupied': return Icons.people_rounded;
+      case 'reserved': return Icons.lock_rounded;
+      default: return Icons.circle;
     }
   }
 
+  // Sheet for manually adding a new campus room
   void _showAddRoomSheet() {
     final nameController = TextEditingController();
     final buildingController = TextEditingController();
@@ -69,9 +66,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
       ),
       builder: (context) => Padding(
         padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 24,
+          left: 24, right: 24, top: 24,
           bottom: MediaQuery.of(context).viewInsets.bottom + 24,
         ),
         child: Column(
@@ -80,24 +75,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
           children: [
             const Text(
               'Add Study Room',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: _textColor,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _textColor),
             ),
             const SizedBox(height: 20),
-            _SheetTextField(
-                controller: nameController,
-                label: 'Room Name (e.g. Room 201)'),
+            _SheetTextField(controller: nameController, label: 'Room Name (e.g. Room 201)'),
             const SizedBox(height: 12),
-            _SheetTextField(
-                controller: buildingController,
-                label: 'Building (e.g. Science Bldg)'),
+            _SheetTextField(controller: buildingController, label: 'Building (e.g. Science Bldg)'),
             const SizedBox(height: 12),
-            _SheetTextField(
-                controller: floorController,
-                label: 'Floor (e.g. 2nd Floor)'),
+            _SheetTextField(controller: floorController, label: 'Floor (e.g. 2nd Floor)'),
             const SizedBox(height: 12),
             _SheetTextField(
               controller: capacityController,
@@ -105,15 +90,12 @@ class _RoomsScreenState extends State<RoomsScreen> {
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 12),
-            _SheetTextField(
-              controller: amenitiesController,
-              label: 'Amenities (e.g. WiFi, Whiteboard)',
-            ),
+            // Amenities entered as comma-separated and split before saving
+            _SheetTextField(controller: amenitiesController, label: 'Amenities (e.g. WiFi, Whiteboard)'),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isEmpty ||
-                    buildingController.text.isEmpty) return;
+                if (nameController.text.isEmpty || buildingController.text.isEmpty) return;
 
                 final amenities = amenitiesController.text
                     .split(',')
@@ -138,18 +120,10 @@ class _RoomsScreenState extends State<RoomsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accentColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text(
-                'Add Room',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
+              child: const Text('Add Room',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
             ),
           ],
         ),
@@ -157,6 +131,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
     );
   }
 
+  // Room detail sheet — shows info and lets anyone update the status.
+  // Status changes write to Firestore and propagate to all devices instantly.
   void _showRoomDetail(RoomModel room) {
     final statusColor = _statusColor(room.status);
     showModalBottomSheet(
@@ -174,54 +150,32 @@ class _RoomsScreenState extends State<RoomsScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  room.name,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: _textColor,
-                  ),
-                ),
+                Text(room.name,
+                    style: const TextStyle(
+                        fontSize: 22, fontWeight: FontWeight.bold, color: _textColor)),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text(
-                    room.status.toUpperCase(),
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
+                  child: Text(room.status.toUpperCase(),
+                      style: TextStyle(
+                          color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            _DetailRow(
-                icon: Icons.location_on_rounded,
-                text: '${room.building} — ${room.floor}'),
+            _DetailRow(icon: Icons.location_on_rounded, text: '${room.building} — ${room.floor}'),
             const SizedBox(height: 8),
-            _DetailRow(
-                icon: Icons.people_rounded,
-                text: 'Capacity: ${room.capacity} people'),
+            _DetailRow(icon: Icons.people_rounded, text: 'Capacity: ${room.capacity} people'),
             const SizedBox(height: 8),
             _DetailRow(
                 icon: Icons.devices_rounded,
-                text: room.amenities.isEmpty
-                    ? 'No amenities listed'
-                    : room.amenities.join(', ')),
+                text: room.amenities.isEmpty ? 'No amenities listed' : room.amenities.join(', ')),
             const SizedBox(height: 24),
-            const Text(
-              'Update Status',
-              style: TextStyle(
-                  color: _textColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16),
-            ),
+            const Text('Update Status',
+                style: TextStyle(color: _textColor, fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 12),
             Row(
               children: ['open', 'occupied', 'reserved'].map((status) {
@@ -231,8 +185,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     padding: const EdgeInsets.only(right: 8),
                     child: ElevatedButton(
                       onPressed: () async {
-                        await _firestoreService.updateRoomStatus(
-                            room.roomId, status);
+                        await _firestoreService.updateRoomStatus(room.roomId, status);
                         if (context.mounted) Navigator.pop(context);
                       },
                       style: ElevatedButton.styleFrom(
@@ -244,10 +197,8 @@ class _RoomsScreenState extends State<RoomsScreen> {
                           side: BorderSide(color: color.withValues(alpha: 0.3)),
                         ),
                       ),
-                      child: Text(
-                        status[0].toUpperCase() + status.substring(1),
-                        style: const TextStyle(fontSize: 12),
-                      ),
+                      child: Text(status[0].toUpperCase() + status.substring(1),
+                          style: const TextStyle(fontSize: 12)),
                     ),
                   ),
                 );
@@ -273,61 +224,50 @@ class _RoomsScreenState extends State<RoomsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Study Rooms',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: _textColor,
-                    ),
-                  ),
+                  Text('Study Rooms',
+                      style: TextStyle(
+                          fontSize: 24, fontWeight: FontWeight.bold, color: _textColor)),
                   SizedBox(height: 4),
-                  Text(
-                    'Live availability — tap to update status',
-                    style: TextStyle(color: _subtextColor, fontSize: 13),
-                  ),
+                  Text('Live availability — tap to update status',
+                      style: TextStyle(color: _subtextColor, fontSize: 13)),
                 ],
               ),
             ),
             const SizedBox(height: 16),
+
+            // Filter chips — applied client-side to the stream snapshot
             SizedBox(
               height: 40,
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 scrollDirection: Axis.horizontal,
                 itemCount: _filters.length,
-                separatorBuilder: (_, i) => const SizedBox(width: 8),
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
                   final f = _filters[index];
                   final selected = _filter == f;
                   return GestureDetector(
                     onTap: () => setState(() => _filter = f),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
                         color: selected ? _accentColor : _cardColor,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: selected ? _accentColor : Colors.white10,
-                        ),
+                        border: Border.all(color: selected ? _accentColor : Colors.white10),
                       ),
-                      child: Text(
-                        f,
-                        style: TextStyle(
-                          color: selected ? Colors.white : _subtextColor,
-                          fontSize: 13,
-                          fontWeight: selected
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                        ),
-                      ),
+                      child: Text(f,
+                          style: TextStyle(
+                            color: selected ? Colors.white : _subtextColor,
+                            fontSize: 13,
+                            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                          )),
                     ),
                   );
                 },
               ),
             ),
             const SizedBox(height: 16),
+
             Expanded(
               child: StreamBuilder<List<RoomModel>>(
                 stream: _firestoreService.getRooms(),
@@ -350,7 +290,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                   return ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     itemCount: rooms.length,
-                    separatorBuilder: (_, i) => const SizedBox(height: 10),
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final room = rooms[index];
                       final statusColor = _statusColor(room.status);
@@ -368,54 +308,43 @@ class _RoomsScreenState extends State<RoomsScreen> {
                           child: Row(
                             children: [
                               Container(
-                                width: 44,
-                                height: 44,
+                                width: 44, height: 44,
                                 decoration: BoxDecoration(
                                   color: statusColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Icon(statusIcon,
-                                    color: statusColor, size: 22),
+                                child: Icon(statusIcon, color: statusColor, size: 22),
                               ),
                               const SizedBox(width: 14),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      room.name,
-                                      style: const TextStyle(
-                                        color: _textColor,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 15,
-                                      ),
-                                    ),
+                                    Text(room.name,
+                                        style: const TextStyle(
+                                            color: _textColor,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 15)),
                                     const SizedBox(height: 3),
                                     Text(
                                       '${room.building} · ${room.floor} · ${room.capacity} seats',
-                                      style: const TextStyle(
-                                        color: _subtextColor,
-                                        fontSize: 12,
-                                      ),
+                                      style: const TextStyle(color: _subtextColor, fontSize: 12),
                                     ),
                                   ],
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
                                   color: statusColor.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  room.status[0].toUpperCase() +
-                                      room.status.substring(1),
+                                  room.status[0].toUpperCase() + room.status.substring(1),
                                   style: TextStyle(
-                                    color: statusColor,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                      color: statusColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ],
@@ -452,10 +381,8 @@ class _DetailRow extends StatelessWidget {
         Icon(icon, color: const Color(0xFF4F8EF7), size: 18),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(color: Color(0xFF9AA0A6), fontSize: 14),
-          ),
+          child: Text(text,
+              style: const TextStyle(color: Color(0xFF9AA0A6), fontSize: 14)),
         ),
       ],
     );
@@ -489,8 +416,7 @@ class _SheetTextField extends StatelessWidget {
           labelText: label,
           labelStyle: const TextStyle(color: Color(0xFF9AA0A6)),
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
     );

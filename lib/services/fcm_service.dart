@@ -2,24 +2,24 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+// Handles everything related to Firebase Cloud Messaging.
+//
 // FCM token lifecycle:
-//   1. initialize() is called at app startup (see main.dart).
-//   2. requestPermission asks the OS for notification rights.
-//   3. _saveToken writes the device token to users/{uid}.fcmToken.
-//   4. onTokenRefresh keeps the stored token current across OS token rotations.
+//   1. initialize() runs at app startup and asks the OS for permission.
+//   2. _saveToken() gets the device's FCM token and stores it in Firestore
+//      under users/{uid}.fcmToken so we know where to send pushes.
+//   3. onTokenRefresh keeps the stored token up to date if the OS rotates it.
 //
-// Foreground message display is handled by the global listener in main.dart
-// so the ScaffoldMessenger can show a SnackBar regardless of which screen
-// is active.
-//
-// The sendX helpers write to the notifications collection. A Cloud Function
-// (functions/index.js) must listen to notifications.onCreate and call
-// messaging.sendMulticast() to deliver the actual push. Without the Cloud
-// Function the docs land in Firestore and appear in the in-app bell, but
-// the OS push does not fire.
+// Notification delivery:
+//   - The sendX methods write a document to the notifications collection.
+//   - storeIncomingMessageForBell() takes FCM messages received by the device
+//     and writes them to the same collection so they show in the bell icon.
 class FCMService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
+  // Called from main.dart when a push arrives (foreground, background, or app open).
+  // Writes the message to Firestore so it shows in the notification bell.
+  // Uses the FCM messageId as the document ID to prevent duplicates.
   Future<void> storeIncomingMessageForBell(RemoteMessage message) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -40,10 +40,13 @@ class FCMService {
       'recipients': [uid],
       'createdAt': Timestamp.now(),
       'type': type,
-      'source': 'fcm',
+      'source': 'fcm', // marks this as coming from a real push, not an in-app event
     };
 
     final notifications = FirebaseFirestore.instance.collection('notifications');
+
+    // If we have a messageId, use it as the doc ID so the same message
+    // can't be written twice (e.g. if onMessageOpenedApp fires multiple times).
     if (messageId != null && messageId.isNotEmpty) {
       await notifications.doc('fcm_$messageId').set(payload, SetOptions(merge: true));
       return;
@@ -52,6 +55,7 @@ class FCMService {
     await notifications.add(payload);
   }
 
+  // Runs at startup — asks for permission and saves the device token.
   Future<void> initialize() async {
     await _messaging.requestPermission(
       alert: true,
@@ -59,9 +63,12 @@ class FCMService {
       sound: true,
     );
     await _saveToken();
+    // Listen for token refreshes — iOS and Android can rotate the token.
     _messaging.onTokenRefresh.listen(_updateToken);
   }
 
+  // Gets the device's FCM token and saves it to the user's Firestore doc.
+  // This token is what Firebase uses to route a push to this specific device.
   Future<void> _saveToken() async {
     final token = await _messaging.getToken();
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -73,6 +80,7 @@ class FCMService {
     }
   }
 
+  // Called automatically when the OS gives the app a new FCM token.
   Future<void> _updateToken(String token) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
@@ -83,6 +91,8 @@ class FCMService {
     }
   }
 
+  // Writes a high-priority task alert to the notifications collection.
+  // Fires when a task is added with a deadline ≤ 3 days or high course weight.
   Future<void> sendHighPriorityAlert({
     required String taskTitle,
     required String courseName,
@@ -97,6 +107,7 @@ class FCMService {
     });
   }
 
+  // Fires when a task is added with a deadline of today or tomorrow.
   Future<void> send24HourReminder({
     required String taskTitle,
     required String courseName,
@@ -111,7 +122,7 @@ class FCMService {
     });
   }
 
-  // Sent immediately when a creator sets a next session date.
+  // Sent to all group members immediately when the creator sets a session date.
   Future<void> sendGroupSessionScheduled({
     required String groupName,
     required DateTime sessionDate,
@@ -121,13 +132,14 @@ class FCMService {
     await FirebaseFirestore.instance.collection('notifications').add({
       'title': 'Session Scheduled — $groupName',
       'body': 'Next session set for ${d.day}/${d.month}/${d.year}. Mark your calendar!',
-      'recipients': memberUids,
+      'recipients': memberUids, // fan-out to every member
       'createdAt': Timestamp.now(),
       'type': 'group',
     });
   }
 
-  // Sent when the session is within 25 hours so members get a same-day heads-up.
+  // Sent to all members when the session is within 25 hours.
+  // If the creator picks tomorrow, both this and sendGroupSessionScheduled fire.
   Future<void> sendGroupSession24HourReminder({
     required String groupName,
     required DateTime sessionDate,

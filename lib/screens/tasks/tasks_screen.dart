@@ -6,11 +6,11 @@ import '../../services/firestore_service.dart';
 import '../../services/fcm_service.dart';
 import '../schedule/schedule_screen.dart';
 
-// ── Add Task Sheet ──────────────────────────────────────────────────────────
-// A proper StatefulWidget instead of StatefulBuilder so Flutter can manage
-// its lifecycle correctly. StatefulBuilder inside showModalBottomSheet causes
-// a _dependents.isEmpty assertion when the Firestore stream emits during the
-// sheet dismiss animation and MediaQuery dependents are still registered.
+// Tasks screen — lists all incomplete tasks sorted by priority score.
+// The calendar icon opens the Weekly Schedule. The FAB opens the Add Task sheet.
+
+// Implemented as a StatefulWidget (not StatefulBuilder) to avoid a lifecycle
+// crash that happened when the Firestore stream fired while the sheet was closing.
 class _AddTaskSheet extends StatefulWidget {
   final String userId;
   final FirestoreService firestoreService;
@@ -49,17 +49,20 @@ class _AddTaskSheetState extends State<_AddTaskSheet> {
   Future<void> _submit() async {
     final course = _courseController.text.trim();
     final title = _titleController.text.trim();
+
     if (course.isEmpty || title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Course name and title are required')));
       return;
     }
+
     final hours = double.tryParse(_hoursController.text);
     if (hours == null || hours <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Estimated hours must be a positive number')));
       return;
     }
+
     final weight = double.tryParse(_weightController.text);
     if (weight == null || weight < 0 || weight > 100) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -82,15 +85,14 @@ class _AddTaskSheetState extends State<_AddTaskSheet> {
 
     await widget.firestoreService.addTask(task);
 
-    // Close the sheet before any further async work so the sheet's context
-    // is fully deactivated before the Firestore stream triggers a rebuild.
+    // Close the sheet first so the Firestore stream rebuild doesn't conflict
+    // with the sheet's widget tree still being active.
     if (mounted) Navigator.pop(context);
 
-    // Notifications run after the sheet is gone — best-effort.
+    // Check notification preference then send alerts if needed
     final userDoc = await FirebaseFirestore.instance
         .collection('users').doc(widget.userId).get();
-    final notifsOn =
-        (userDoc.data()?['notificationsEnabled'] ?? true) as bool;
+    final notifsOn = (userDoc.data()?['notificationsEnabled'] ?? true) as bool;
 
     if (notifsOn) {
       final label = TaskModel.getPriorityLabel(_deadline, weight);
@@ -131,6 +133,8 @@ class _AddTaskSheetState extends State<_AddTaskSheet> {
           _Field(controller: _weightController, label: 'Course Weight % (e.g. 20)',
               keyboardType: TextInputType.number),
           const SizedBox(height: 12),
+
+          // Deadline date picker
           GestureDetector(
             onTap: () async {
               final picked = await showDatePicker(
@@ -186,7 +190,7 @@ class _AddTaskSheetState extends State<_AddTaskSheet> {
   }
 }
 
-// Simple text field used inside _AddTaskSheet.
+// Styled text field used inside the Add Task sheet
 class _Field extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -222,6 +226,8 @@ class _Field extends StatelessWidget {
   }
 }
 
+// Main task list — streams from Firestore sorted by priority score.
+// Swipe left to delete, tap the circle to mark complete.
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
 
@@ -294,12 +300,14 @@ class _TasksScreenState extends State<TasksScreen> {
                   ),
                   Row(
                     children: [
+                      // Priority legend
                       _LegendDot(color: Colors.redAccent, label: 'High'),
                       const SizedBox(width: 8),
                       _LegendDot(color: Colors.orangeAccent, label: 'Med'),
                       const SizedBox(width: 8),
                       _LegendDot(color: Colors.greenAccent, label: 'Low'),
                       const SizedBox(width: 12),
+                      // Opens the weekly schedule screen
                       GestureDetector(
                         onTap: () => Navigator.push(
                           context,
@@ -360,6 +368,7 @@ class _TasksScreenState extends State<TasksScreen> {
                       final label = _priorityLabel(task);
                       final dueLabel = TaskModel.daysLeftLabel(task.deadline);
 
+                      // Swipe left to delete
                       return Dismissible(
                         key: Key(task.taskId),
                         direction: DismissDirection.endToStart,
@@ -384,7 +393,7 @@ class _TasksScreenState extends State<TasksScreen> {
                           ),
                           child: Row(
                             children: [
-                              // Tap to mark complete.
+                              // Tap circle to mark complete — removes from list (stream filters completed=false)
                               GestureDetector(
                                 onTap: () =>
                                     _firestoreService.completeTask(task.taskId),
@@ -463,6 +472,7 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 }
 
+// Small coloured dot used in the priority legend
 class _LegendDot extends StatelessWidget {
   final Color color;
   final String label;

@@ -1,24 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Backs tasks/{taskId} in Firestore. Each task is owned by one user; the rule
-// layer enforces that ownership (see firestore.rules > tasks).
+// Represents a single task stored under tasks/{taskId} in Firestore.
+// Each task belongs to one user — ownership is enforced by firestore.rules.
 //
-// Two related concepts live here:
-//   - getPriorityLabel: a coarse High/Med/Low bucket used in UI badges. It
-//     is intentionally rule-based (deadline + course weight) so the badge
-//     stays explainable to the student.
-//   - calculatePriority: the numeric score used to sort the tasks list. It
-//     blends urgency, course weight, and effort so quick high-impact wins
-//     surface above slow low-impact ones.
+// The priority engine lives here in two parts:
+//   - getPriorityLabel() → simple High/Med/Low badge for the UI
+//   - calculatePriority() → weighted numeric score used to sort the task list
 class TaskModel {
   final String taskId;
-  final String userId;
+  final String userId;      // links back to the auth user
   final String courseName;
   final String title;
   final DateTime deadline;
   final double estimatedHours;
-  final double courseWeight;
-  final double priorityScore;
+  final double courseWeight; // percentage weight of the task in the course
+  final double priorityScore; // computed score, higher = more urgent
   final bool completed;
   final DateTime createdAt;
 
@@ -35,29 +31,39 @@ class TaskModel {
     required this.createdAt,
   });
 
+  // Determines the High/Med/Low badge shown on each task card.
+  // Rule-based so the student can understand why they got a certain label.
   static String getPriorityLabel(DateTime deadline, double courseWeight) {
     final daysLeft = deadline.difference(DateTime.now()).inDays;
-    if (daysLeft <= 3) return 'High';
-    if (daysLeft <= 7 && courseWeight >= 15) return 'High';
-    if (courseWeight >= 15) return 'Med';
-    if (daysLeft <= 14) return 'Med';
+    if (daysLeft <= 3) return 'High';                        // always urgent if due in 3 days
+    if (daysLeft <= 7 && courseWeight >= 15) return 'High'; // heavy course + soon = High
+    if (courseWeight >= 15) return 'Med';                    // heavy course but time left
+    if (daysLeft <= 14) return 'Med';                        // within 2 weeks
     return 'Low';
   }
 
+  // Weighted scoring formula used to sort tasks by urgency.
+  //   50% urgency  — how close the deadline is (0–100 scale)
+  //   30% weight   — how much the task counts toward the course grade
+  //   20% effort   — shorter tasks get a small bonus (quick wins)
   static double calculatePriority(
       DateTime deadline, double estimatedHours, double courseWeight) {
     final daysLeft = deadline.difference(DateTime.now()).inDays;
-    // Closer deadline → higher urgency. Past-due tasks max out at 100.
+
+    // Tasks past their deadline get max urgency (100). Future tasks scale down.
     final urgencyScore = (100 - daysLeft).clamp(0, 100).toDouble();
-    // Floor estimatedHours so a user entering 0 doesn't blow up to infinity.
+
+    // Guard against 0 hours to avoid a divide-by-zero crash.
     final hours = estimatedHours <= 0 ? 0.5 : estimatedHours;
-    // Shorter tasks get a small bonus — encourages knocking out quick wins.
+
+    // Shorter tasks score higher here — rewards knocking out quick wins first.
     final effortScore = (10 / hours).clamp(0, 100).toDouble();
+
     return (urgencyScore * 0.5) + (courseWeight * 0.3) + (effortScore * 0.2);
   }
 
-  // Friendly relative-deadline label used by every task card. Centralised
-  // here so the home dashboard and tasks list stay consistent.
+  // Human-readable deadline label shown on task cards and the dashboard.
+  // Centralized here so home screen and tasks screen always say the same thing.
   static String daysLeftLabel(DateTime deadline) {
     final now = DateTime.now();
     final diff = deadline.difference(now);
@@ -68,6 +74,8 @@ class TaskModel {
     return '$days days left';
   }
 
+  // Converts the model to a Map for writing to Firestore.
+  // Dates are stored as Firestore Timestamps (not plain DateTimes).
   Map<String, dynamic> toMap() {
     return {
       'taskId': taskId,
@@ -83,6 +91,7 @@ class TaskModel {
     };
   }
 
+  // Reconstructs a TaskModel from a Firestore document snapshot.
   factory TaskModel.fromMap(Map<String, dynamic> map, String id) {
     return TaskModel(
       taskId: id,

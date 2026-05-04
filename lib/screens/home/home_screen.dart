@@ -7,6 +7,9 @@ import '../groups/groups_screen.dart';
 import '../profile/profile_screen.dart';
 import '../../models/task_model.dart';
 
+// Main app shell — holds the bottom nav and swaps between the 5 screens.
+// HomeDashboard is the actual content of the Home tab and pulls live counts
+// from Firestore for tasks, rooms, and groups without any manual refresh.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -62,6 +65,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// Dashboard shown on the Home tab.
+// Uses separate StreamBuilders per collection so each stat card updates independently.
 class HomeDashboard extends StatelessWidget {
   final Function(int) onSwitchTab;
   const HomeDashboard({super.key, required this.onSwitchTab});
@@ -72,6 +77,8 @@ class HomeDashboard extends StatelessWidget {
   static const _textColor = Color(0xFFE8EAED);
   static const _subtextColor = Color(0xFF9AA0A6);
 
+  // Opens the notification bell — filters by arrayContains so each user
+  // only sees notifications sent to them specifically.
   void _showNotificationsSheet(BuildContext context, String userId) {
     showModalBottomSheet(
       context: context,
@@ -122,6 +129,8 @@ class HomeDashboard extends StatelessWidget {
                       );
                     }
 
+                    // Sort newest-first in memory since combining orderBy with
+                    // arrayContains needs a composite index we haven't deployed.
                     final notifs = docs.toList()
                       ..sort((a, b) {
                         final aData = a.data() as Map<String, dynamic>;
@@ -202,6 +211,7 @@ class HomeDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // currentUser is non-null here — main.dart only shows HomeScreen after auth confirms sign-in
     final user = FirebaseAuth.instance.currentUser;
 
     return SafeArea(
@@ -210,6 +220,8 @@ class HomeDashboard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+
+            // Greeting row + notification bell
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -242,8 +254,9 @@ class HomeDashboard extends StatelessWidget {
             ),
             const SizedBox(height: 28),
 
-            // Stats row — three nested StreamBuilders kept intentionally flat
-            // to avoid pulling all data into a single stream merge.
+            // Stats row — three nested StreamBuilders so each card re-renders independently.
+            // Groups are filtered client-side because Firestore can't combine arrayContains
+            // with other queries without a composite index.
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('tasks')
@@ -294,8 +307,8 @@ class HomeDashboard extends StatelessWidget {
             ),
             const SizedBox(height: 28),
 
-            // Upcoming group sessions — only renders when the user has at
-            // least one group with a future nextSession date.
+            // Upcoming group sessions — only shows if the user is a member of a group
+            // that has a future nextSession date. Hidden completely when nothing is scheduled.
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('groups')
@@ -308,12 +321,9 @@ class HomeDashboard extends StatelessWidget {
                     .map((d) => d.data() as Map<String, dynamic>)
                     .where((d) {
                       final members = d['members'] as List?;
-                      if (members == null ||
-                          !members.contains(user?.uid)) {
-                        return false;
-                      }
+                      if (members == null || !members.contains(user?.uid)) return false;
                       final ts = d['nextSession'] as Timestamp?;
-                      if (ts == null) { return false; }
+                      if (ts == null) return false;
                       return ts.toDate().isAfter(now);
                     })
                     .toList()
@@ -334,11 +344,10 @@ class HomeDashboard extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                             color: _textColor)),
                     const SizedBox(height: 12),
+                    // Show at most 3 upcoming sessions on the dashboard
                     ...upcoming.take(3).map((g) {
-                      final session =
-                          (g['nextSession'] as Timestamp).toDate();
-                      final daysUntil =
-                          session.difference(now).inDays;
+                      final session = (g['nextSession'] as Timestamp).toDate();
+                      final daysUntil = session.difference(now).inDays;
                       final label = daysUntil == 0
                           ? 'Today'
                           : daysUntil == 1
@@ -353,30 +362,22 @@ class HomeDashboard extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: _cardColor,
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                  color:
-                                      _accentColor.withValues(alpha: 0.25)),
+                              border: Border.all(color: _accentColor.withValues(alpha: 0.25)),
                             ),
                             child: Row(
                               children: [
                                 Container(
-                                  width: 40,
-                                  height: 40,
+                                  width: 40, height: 40,
                                   decoration: BoxDecoration(
-                                    color:
-                                        _accentColor.withValues(alpha: 0.15),
+                                    color: _accentColor.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Icon(
-                                      Icons.groups_rounded,
-                                      color: _accentColor,
-                                      size: 20),
+                                  child: const Icon(Icons.groups_rounded, color: _accentColor, size: 20),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(g['name'] ?? '',
                                           style: const TextStyle(
@@ -385,18 +386,14 @@ class HomeDashboard extends StatelessWidget {
                                               fontSize: 14)),
                                       const SizedBox(height: 2),
                                       Text(g['courseTag'] ?? '',
-                                          style: const TextStyle(
-                                              color: _subtextColor,
-                                              fontSize: 12)),
+                                          style: const TextStyle(color: _subtextColor, fontSize: 12)),
                                     ],
                                   ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                   decoration: BoxDecoration(
-                                    color:
-                                        _accentColor.withValues(alpha: 0.15),
+                                    color: _accentColor.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(label,
@@ -421,6 +418,7 @@ class HomeDashboard extends StatelessWidget {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _textColor)),
             const SizedBox(height: 16),
 
+            // Top 3 incomplete tasks sorted by priority score
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('tasks')
@@ -497,6 +495,7 @@ class HomeDashboard extends StatelessWidget {
             ),
             const SizedBox(height: 28),
 
+            // Pomodoro tip
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -524,6 +523,7 @@ class HomeDashboard extends StatelessWidget {
   }
 }
 
+// Tappable stat card — navigates to its tab when tapped
 class _StatCard extends StatelessWidget {
   final String label, value;
   final IconData icon;
@@ -569,6 +569,7 @@ class _StatCard extends StatelessWidget {
   }
 }
 
+// Task row in the Today's Priorities section
 class _PriorityTaskCard extends StatelessWidget {
   final String course, title, dueLabel, priority;
   final Color priorityColor;
@@ -624,6 +625,7 @@ class _PriorityTaskCard extends StatelessWidget {
   }
 }
 
+// Quick action shortcut tile
 class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String label;

@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
 import '../../services/storage_service.dart';
 
+// Profile screen — shows the student's info from Firestore in real time.
+// Handles avatar upload, course management, and notification preferences.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -14,8 +16,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
   final _storageService = StorageService();
-  // ProfileScreen is only reachable when the auth stream emits a non-null
-  // user, so the bang here is safe — see main.dart's StreamBuilder guard.
   final _user = FirebaseAuth.instance.currentUser!;
   bool _uploadingAvatar = false;
 
@@ -25,6 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   static const _textColor = Color(0xFFE8EAED);
   static const _subtextColor = Color(0xFF9AA0A6);
 
+  // Pick from gallery, upload to Firebase Storage, save URL back to Firestore
   Future<void> _pickAndUploadAvatar() async {
     final file = await _storageService.pickImage();
     if (file == null) return;
@@ -33,10 +34,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _uploadingAvatar = false);
   }
 
-  // Each preference toggle gets its own local state variable so that
-  // toggling one switch doesn't visually flip the other.
-  void _showNotificationPreferences(
-      bool deadlineEnabled, bool groupAlertsEnabled) {
+  // Each switch has its own local bool so toggling one doesn't affect the other visually
+  void _showNotificationPreferences(bool deadlineEnabled, bool groupAlertsEnabled) {
     showModalBottomSheet(
       context: context,
       backgroundColor: _cardColor,
@@ -52,9 +51,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               const Text('Notification Preferences',
                   style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: _textColor)),
+                      fontSize: 20, fontWeight: FontWeight.bold, color: _textColor)),
               const SizedBox(height: 24),
               _PrefRow(
                 title: 'Deadline Reminders',
@@ -65,8 +62,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   await FirebaseFirestore.instance
                       .collection('users')
                       .doc(_user.uid)
-                      .set({'notificationsEnabled': val},
-                          SetOptions(merge: true));
+                      .set({'notificationsEnabled': val}, SetOptions(merge: true));
                 },
               ),
               const SizedBox(height: 12),
@@ -79,8 +75,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   await FirebaseFirestore.instance
                       .collection('users')
                       .doc(_user.uid)
-                      .set({'groupAlertsEnabled': val},
-                          SetOptions(merge: true));
+                      .set({'groupAlertsEnabled': val}, SetOptions(merge: true));
                 },
               ),
             ],
@@ -90,7 +85,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -98,21 +92,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
+          // Stream the user doc so changes (avatar, courses) update live
           child: StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')
                 .doc(_user.uid)
                 .snapshots(),
             builder: (context, snapshot) {
-              final data =
-                  snapshot.data?.data() as Map<String, dynamic>? ?? {};
-              final name =
-                  data['displayName'] ?? _user.displayName ?? 'Student';
+              final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+              final name = data['displayName'] ?? _user.displayName ?? 'Student';
               final email = data['email'] ?? _user.email ?? '';
               final courses = List<String>.from(data['courses'] ?? []);
               final photoURL = data['photoURL'] ?? '';
-              final notificationsEnabled =
-                  data['notificationsEnabled'] ?? true;
+              final notificationsEnabled = data['notificationsEnabled'] ?? true;
               final groupAlertsEnabled = data['groupAlertsEnabled'] ?? true;
 
               return Column(
@@ -120,11 +112,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   const Text('Profile',
                       style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: _textColor)),
+                          fontSize: 24, fontWeight: FontWeight.bold, color: _textColor)),
                   const SizedBox(height: 28),
 
+                  // Avatar — tap to change, spinner shows while uploading
                   Center(
                     child: Column(
                       children: [
@@ -138,25 +129,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   color: _accentColor.withValues(alpha: 0.15),
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                      color: _accentColor.withValues(alpha: 0.3),
-                                      width: 2),
+                                      color: _accentColor.withValues(alpha: 0.3), width: 2),
                                 ),
                                 child: _uploadingAvatar
-                                    ? const Center(
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2))
+                                    ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                                     : photoURL.isNotEmpty
                                         ? ClipOval(
                                             child: Image.network(photoURL,
-                                                width: 80,
-                                                height: 80,
-                                                fit: BoxFit.cover),
-                                          )
+                                                width: 80, height: 80, fit: BoxFit.cover))
                                         : Center(
                                             child: Text(
-                                              name.isNotEmpty
-                                                  ? name[0].toUpperCase()
-                                                  : 'S',
+                                              name.isNotEmpty ? name[0].toUpperCase() : 'S',
                                               style: const TextStyle(
                                                   fontSize: 32,
                                                   fontWeight: FontWeight.bold,
@@ -171,8 +154,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   decoration: BoxDecoration(
                                     color: _accentColor,
                                     shape: BoxShape.circle,
-                                    border: Border.all(
-                                        color: _bgColor, width: 2),
+                                    border: Border.all(color: _bgColor, width: 2),
                                   ),
                                   child: const Icon(Icons.camera_alt_rounded,
                                       size: 12, color: Colors.white),
@@ -184,30 +166,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 16),
                         Text(name,
                             style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: _textColor)),
+                                fontSize: 20, fontWeight: FontWeight.bold, color: _textColor)),
                         const SizedBox(height: 4),
                         Text(email,
-                            style: const TextStyle(
-                                color: _subtextColor, fontSize: 14)),
+                            style: const TextStyle(color: _subtextColor, fontSize: 14)),
                         const SizedBox(height: 8),
                         const Text('Tap avatar to change photo',
-                            style:
-                                TextStyle(color: _subtextColor, fontSize: 12)),
+                            style: TextStyle(color: _subtextColor, fontSize: 12)),
                       ],
                     ),
                   ),
                   const SizedBox(height: 32),
 
+                  // Courses — long press a chip to remove it
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('My Courses',
                           style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: _textColor)),
+                              fontSize: 16, fontWeight: FontWeight.bold, color: _textColor)),
                       GestureDetector(
                         onTap: () => _showAddCourseSheet(courses),
                         child: const Text('+ Add',
@@ -243,8 +220,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   await FirebaseFirestore.instance
                                       .collection('users')
                                       .doc(_user.uid)
-                                      .set({'courses': updated},
-                                          SetOptions(merge: true));
+                                      .set({'courses': updated}, SetOptions(merge: true));
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -264,8 +240,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600)),
                                       const SizedBox(width: 6),
-                                      const Icon(Icons.close,
-                                          size: 14, color: _accentColor),
+                                      const Icon(Icons.close, size: 14, color: _accentColor),
                                     ],
                                   ),
                                 ),
@@ -274,11 +249,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   const SizedBox(height: 32),
 
+                  // Settings
                   const Text('Settings',
                       style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: _textColor)),
+                          fontSize: 16, fontWeight: FontWeight.bold, color: _textColor)),
                   const SizedBox(height: 12),
                   _SettingsRow(
                     icon: Icons.notifications_none_rounded,
@@ -288,25 +262,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 32),
 
+                  // Sign out — auth stream in main.dart routes back to LoginScreen automatically
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () => _authService.signOut(),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            Colors.redAccent.withValues(alpha: 0.15),
+                        backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
                         foregroundColor: Colors.redAccent,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(
-                              color: Colors.redAccent.withValues(alpha: 0.3)),
+                          side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
                         ),
                       ),
                       child: const Text('Sign Out',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w600)),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ],
@@ -338,9 +310,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             const Text('Add Course',
                 style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: _textColor)),
+                    fontSize: 20, fontWeight: FontWeight.bold, color: _textColor)),
             const SizedBox(height: 20),
             Container(
               decoration: BoxDecoration(
@@ -355,8 +325,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   labelText: 'Course Code (e.g. CS450)',
                   labelStyle: TextStyle(color: _subtextColor),
                   border: InputBorder.none,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 ),
               ),
             ),
@@ -364,10 +333,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ElevatedButton(
               onPressed: () async {
                 if (courseController.text.trim().isEmpty) return;
-                final updated = [
-                  ...existingCourses,
-                  courseController.text.trim()
-                ];
+                final updated = [...existingCourses, courseController.text.trim()];
                 await FirebaseFirestore.instance
                     .collection('users')
                     .doc(_user.uid)
@@ -377,14 +343,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: _accentColor,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Add Course',
                   style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white)),
+                      fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
             ),
           ],
         ),
@@ -393,17 +356,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// Reusable preference row used inside the notifications bottom sheet.
 class _PrefRow extends StatelessWidget {
   final String title, subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
 
   const _PrefRow({
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
+    required this.title, required this.subtitle,
+    required this.value, required this.onChanged,
   });
 
   static const _bgColor = Color(0xFF0F1117);
@@ -428,12 +388,9 @@ class _PrefRow extends StatelessWidget {
             children: [
               Text(title,
                   style: const TextStyle(
-                      color: _textColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14)),
+                      color: _textColor, fontWeight: FontWeight.w600, fontSize: 14)),
               const SizedBox(height: 4),
-              Text(subtitle,
-                  style: const TextStyle(color: _subtextColor, fontSize: 12)),
+              Text(subtitle, style: const TextStyle(color: _subtextColor, fontSize: 12)),
             ],
           ),
           Switch(value: value, onChanged: onChanged, activeThumbColor: _accentColor),
@@ -448,8 +405,7 @@ class _SettingsRow extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _SettingsRow(
-      {required this.icon, required this.label, required this.onTap});
+  const _SettingsRow({required this.icon, required this.label, required this.onTap});
 
   static const _cardColor = Color(0xFF1A1D2E);
   static const _accentColor = Color(0xFF4F8EF7);
@@ -471,10 +427,8 @@ class _SettingsRow extends StatelessWidget {
             Icon(icon, color: _accentColor, size: 20),
             const SizedBox(width: 14),
             Expanded(
-                child: Text(label,
-                    style: const TextStyle(color: _textColor, fontSize: 14))),
-            const Icon(Icons.chevron_right_rounded,
-                color: Color(0xFF9AA0A6), size: 20),
+                child: Text(label, style: const TextStyle(color: _textColor, fontSize: 14))),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF9AA0A6), size: 20),
           ],
         ),
       ),

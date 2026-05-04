@@ -3,20 +3,24 @@ import '../models/task_model.dart';
 import '../models/room_model.dart';
 import '../models/group_model.dart';
 
-// All Firestore reads and writes go through this class. Every method maps to
-// a single collection and uses the paths documented in firestore.rules.
+// Central service for all Firestore reads and writes.
+// Every collection in the app goes through here — no screen
+// talks to Firestore directly. Makes it easy to change the
+// data layer without touching the UI.
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // ── TASKS ──────────────────────────────────────────────────────────────────
-  // Compound query (userId + completed=false) requires a composite index —
-  // see firestore.indexes.json.
 
+  // Adds a new task and lets Firestore auto-generate the document ID,
+  // then writes that ID back into the document so we always have it.
   Future<void> addTask(TaskModel task) async {
     final ref = _db.collection('tasks').doc();
     await ref.set({...task.toMap(), 'taskId': ref.id});
   }
 
+  // Real-time stream of the user's incomplete tasks, sorted by priority score.
+  // This query uses a composite index on (userId, completed) — see firestore.indexes.json.
   Stream<List<TaskModel>> getTasks(String userId) {
     return _db
         .collection('tasks')
@@ -26,31 +30,39 @@ class FirestoreService {
         .map((snap) {
       final tasks =
           snap.docs.map((d) => TaskModel.fromMap(d.data(), d.id)).toList();
+      // Sort by priority score so the most urgent task is always at the top.
       tasks.sort((a, b) => b.priorityScore.compareTo(a.priorityScore));
       return tasks;
     });
   }
 
+  // Marks a task as done — it disappears from the list immediately
+  // because the stream filters out completed tasks.
   Future<void> completeTask(String taskId) async {
     await _db.collection('tasks').doc(taskId).update({'completed': true});
   }
 
+  // Swipe-to-delete — permanently removes the task from Firestore.
   Future<void> deleteTask(String taskId) async {
     await _db.collection('tasks').doc(taskId).delete();
   }
 
   // ── ROOMS ──────────────────────────────────────────────────────────────────
 
+  // Returns all study rooms ordered alphabetically, in real time.
   Stream<List<RoomModel>> getRooms() {
     return _db.collection('rooms').orderBy('name').snapshots().map((snap) =>
         snap.docs.map((d) => RoomModel.fromMap(d.data(), d.id)).toList());
   }
 
+  // Lets a student manually add a room to the list.
   Future<void> addRoom(RoomModel room) async {
     final ref = _db.collection('rooms').doc();
     await ref.set({...room.toMap(), 'roomId': ref.id});
   }
 
+  // Updates the live status of a room (open / occupied / reserved).
+  // Any student can flip this — it's a collaborative system.
   Future<void> updateRoomStatus(String roomId, String status) async {
     await _db.collection('rooms').doc(roomId).update({
       'status': status,
@@ -58,9 +70,8 @@ class FirestoreService {
     });
   }
 
-  // Seeds demo data on first launch; the Firestore rule allows any auth user
-  // to create rooms, so this works from the client. A real deployment would
-  // seed via a Cloud Function or the Firebase Admin SDK.
+  // Populates the rooms collection with demo data on first launch.
+  // The guard check makes sure we only seed once.
   Future<void> seedRooms() async {
     final existing = await _db.collection('rooms').limit(1).get();
     if (existing.docs.isNotEmpty) return;
@@ -74,6 +85,7 @@ class FirestoreService {
       {'name': 'Room 102', 'building': 'Humanities Bldg', 'floor': '1st Floor', 'capacity': 12, 'status': 'open', 'amenities': ['Whiteboard', 'WiFi']},
     ];
 
+    // Use a batch write so all 6 rooms either all succeed or all fail together.
     final batch = _db.batch();
     for (final room in rooms) {
       final ref = _db.collection('rooms').doc();
@@ -84,6 +96,7 @@ class FirestoreService {
 
   // ── GROUPS ─────────────────────────────────────────────────────────────────
 
+  // Streams all study groups, newest first.
   Stream<List<GroupModel>> getGroups() {
     return _db
         .collection('groups')
@@ -98,24 +111,31 @@ class FirestoreService {
     await ref.set({...group.toMap(), 'groupId': ref.id});
   }
 
+  // arrayUnion safely adds the user to the members list without duplicates,
+  // even if two people tap "Join" at the same time.
   Future<void> joinGroup(String groupId, String userId) async {
     await _db.collection('groups').doc(groupId).update({
       'members': FieldValue.arrayUnion([userId]),
     });
   }
 
+  // arrayRemove removes only the specific user without affecting other members.
   Future<void> leaveGroup(String groupId, String userId) async {
     await _db.collection('groups').doc(groupId).update({
       'members': FieldValue.arrayRemove([userId]),
     });
   }
 
+  // Creator sets the next group session date. Notifications are sent
+  // by the calling screen (groups_screen.dart) after this write completes.
   Future<void> updateNextSession(String groupId, DateTime session) async {
     await _db.collection('groups').doc(groupId).update({
       'nextSession': Timestamp.fromDate(session),
     });
   }
 
+  // Deletes the group for everyone — the real-time stream removes it
+  // from all members' screens instantly.
   Future<void> deleteGroup(String groupId) async {
     await _db.collection('groups').doc(groupId).delete();
   }
